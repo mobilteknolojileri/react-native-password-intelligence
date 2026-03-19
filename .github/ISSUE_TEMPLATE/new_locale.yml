@@ -1,0 +1,36 @@
+name: New Locale Support
+description: Propose a new language or region dictionary
+title: "[LOCALE] "
+labels: ["enhancement", "locale"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us expand the regional intelligence of this project!
+  - type: input
+    id: locale-info
+    attributes:
+      label: Locale Information
+      description: Which language or region are you proposing?
+      placeholder: e.g., German (de), French (fr), etc.
+    validations:
+      required: true
+  - type: textarea
+    id: locale-patterns
+    attributes:
+      label: Expected Patterns
+      description: Provide a few examples of common cultural or regional passwords for this locale.
+      placeholder: |
+        - Common Names: [names]
+        - Sports/Culture: [terms]
+        - Keyboard Layout walks specific to this region: [examples]
+    validations:
+      required: true
+  - type: checkboxes
+    id: locale-contribution
+    attributes:
+      label: Willing to Contribute?
+      description: Are you willing to help build this dictionary?
+      options:
+        - label: Yes, I can create a Pull Request with the dictionary definitions!
+          required: false
