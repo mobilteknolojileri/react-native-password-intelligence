@@ -11,6 +11,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Web-lightgrey?style=flat-square)](https://reactnative.dev/)
 
+<!-- TODO: Replace with actual GIF or WebP -->
+<!-- <img src="./assets/demo.gif" alt="React Native Password Intelligence Demo" width="300" /> -->
+
 </div>
 
 ---
@@ -19,7 +22,7 @@
 
 Standard password meters treat `password123` as weak but often miss regional patterns like `mehmet1907`, `karakartal`, or `askim34`. These "cultural" passwords are among the most common found in regional data breaches.
 
-**Password Intelligence** wraps the industry-standard [zxcvbn-ts](https://github.com/zxcvbn-ts/zxcvbn-ts) engine, adding a **Turkish-first intelligence layer** with an extensible architecture for future locales.
+**Password Intelligence** wraps the industry-standard [zxcvbn-ts](https://github.com/zxcvbn-ts/zxcvbn) engine, adding a **Turkish-first intelligence layer** with an extensible architecture for future locales.
 
 ### Turkish Intelligence Layer
 
