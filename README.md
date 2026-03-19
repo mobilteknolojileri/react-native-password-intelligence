@@ -28,9 +28,9 @@ Standard password meters treat `password123` as weak but often miss regional pat
 
 | Category | Detections & Examples |
 |---|---|
-| Common Names | `mehmet`, `ayşe`, `fatma`, `burak`, `memo`, `ibo`, etc. |
+| Common Names | `mehmet`, `ayşe`, `fatma`, `burak`, `memo`, `nizipliibo`, etc. |
 | Football Culture | Major clubs (`cimbom`, `fenerbahce`, `besiktas`) and fan terms. |
-| City Plate Patterns | Intelligent matching for plate codes (e.g., `34`, `06`, `35`) and city names. |
+| City Plate Patterns | Intelligent matching for plate codes (e.g., `34`, `06`, `27`) and city names. |
 | Cultural/Historic | Keywords like `ataturk`, `1453`, `1923`, `cumhuriyet`, `turkiye`. |
 | Romantic & Social | Common terms like `askim`, `canim`, `hayatim`, `birtanem`. |
 | Keyboard Walks | Robust detection for `qweasd`, `asdfgh`, `qazwsx`, etc. |
