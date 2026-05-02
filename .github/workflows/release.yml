@@ -42,8 +42,14 @@ jobs:
       - name: Build library
         run: yarn prepare
 
-      - name: Verify tarball contents
-        run: npm pack --dry-run
+      - name: Pack tarball for release attachment
+        run: npm pack
+
+      - name: Generate sha256 checksum for the tarball
+        run: |
+          TARBALL=$(ls react-native-password-intelligence-*.tgz)
+          sha256sum "$TARBALL" > "${TARBALL}.sha256"
+          cat "${TARBALL}.sha256"
 
       - name: Publish to npm
         run: npm publish --provenance --access public
@@ -55,3 +61,5 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             CHANGELOG.md
+            react-native-password-intelligence-*.tgz
+            react-native-password-intelligence-*.tgz.sha256
