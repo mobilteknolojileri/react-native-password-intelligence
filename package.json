@@ -1,7 +1,7 @@
 {
   "name": "react-native-password-intelligence",
-  "version": "0.2.2",
-  "description": "Turkish-aware React Native password intelligence kit",
+  "version": "0.3.0",
+  "description": "Turkish-first password strength estimator for React Native — detects regional patterns (names, surnames, football, plates, brands) and ships an animated meter, headless hook, and pure analyzer.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -15,6 +15,9 @@
   "files": [
     "src",
     "lib",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "ARCHITECTURE.md",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -29,19 +32,31 @@
     "typecheck": "tsc",
     "release": "release-it --only-version",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "test": "jest"
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "prepublishOnly": "yarn lint && yarn typecheck && yarn test && yarn prepare"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [
-    "react-native",
+    "turkish",
+    "turkce",
+    "password-intelligence",
+    "password-strength",
     "password",
+    "react-native",
+    "expo",
     "security",
     "strength",
     "meter",
     "zxcvbn",
-    "turkish",
+    "zxcvbn-ts",
     "nist",
-    "password-strength",
-    "password-intelligence",
+    "nist-800-63b",
+    "cultural-awareness",
+    "threat-intelligence",
     "ios",
     "android"
   ],
@@ -56,7 +71,9 @@
   },
   "homepage": "https://github.com/mobilteknolojileri/react-native-password-intelligence#readme",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "provenance": true
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",
@@ -87,8 +104,8 @@
     "typescript": "^5.9.2"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0"
   },
   "workspaces": [
     "example"
@@ -148,7 +165,20 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
-    ]
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "!src/**/*.d.ts",
+      "!src/__tests__/**"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 85,
+        "functions": 80,
+        "branches": 75,
+        "statements": 85
+      }
+    }
   },
   "create-react-native-library": {
     "type": "library",
