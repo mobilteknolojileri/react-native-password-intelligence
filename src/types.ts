@@ -21,6 +21,8 @@ export interface TurkishDictionary {
   romanticTerms: DictionaryArray;
   religiousNationalistic: DictionaryArray;
   commonPasswords: DictionaryArray;
+  zodiacSigns: DictionaryArray;
+  brands: DictionaryArray;
 }
 
 /** Zxcvbn score on a 0-4 discrete scale. */
