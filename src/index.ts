@@ -1,5 +1,5 @@
 // Public API surface
-export { analyzePassword } from './core/analyzer';
+export { analyzePassword, addCustomDictionary } from './core/analyzer';
 export { usePasswordRisk } from './hooks/usePasswordRisk';
 export { PasswordMeter } from './ui/PasswordMeter';
 
