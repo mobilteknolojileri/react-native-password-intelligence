@@ -1,0 +1,15 @@
+# Default owner for everything in the repo.
+*                              @mobilteknolojileri
+
+# Critical paths — explicit ownership keeps reviewers honest even if defaults shift.
+/src/core/                     @mobilteknolojileri
+/src/dictionaries/             @mobilteknolojileri
+/src/translations/             @mobilteknolojileri
+/src/ui/                       @mobilteknolojileri
+/src/hooks/                    @mobilteknolojileri
+
+# Release-relevant configuration.
+/package.json                  @mobilteknolojileri
+/.github/workflows/            @mobilteknolojileri
+/CHANGELOG.md                  @mobilteknolojileri
+/SECURITY.md                   @mobilteknolojileri
