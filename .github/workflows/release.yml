@@ -27,6 +27,9 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org
 
+      - name: Use latest npm (required for trusted publisher oidc)
+        run: npm install -g npm@latest
+
       - name: Lint
         run: yarn lint
 
