@@ -1,60 +1,50 @@
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, type ViewStyle } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Animated,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { usePasswordRisk } from '../hooks/usePasswordRisk';
 import type { PasswordScore } from '../types';
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 /**
  * Discriminated union: provide either `password` (auto-analyzed) OR `score`
- * (pre-computed). Supplying neither is a type error.
+ * (pre-computed). Supplying neither is a type error. The `score` variant
+ * intentionally bypasses the analyzer entirely so consumers who already have
+ * a score (e.g., from a server) pay no zxcvbn initialization cost.
  */
-type PasswordMeterProps = (
-  | { password: string; score?: never }
-  | { score: PasswordScore; password?: never }
+export type PasswordMeterProps = (
+  | {
+      password: string;
+      userInputs?: readonly (string | number)[];
+      score?: never;
+    }
+  | { score: PasswordScore; password?: never; userInputs?: never }
 ) & {
   /** Custom wrapper style. */
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   /** Height of the progress bar in pixels. @default 6 */
   barHeight?: number;
 };
 
-// ---------------------------------------------------------------------------
-// Color scale (0-4)
-// ---------------------------------------------------------------------------
-
-const SCORE_COLORS: readonly string[] = [
+const SCORE_COLORS = [
   '#ef4444', // 0 — Very Weak (red)
   '#f97316', // 1 — Weak (orange)
   '#eab308', // 2 — Fair (yellow)
   '#84cc16', // 3 — Good (lime)
   '#22c55e', // 4 — Strong (green)
-] as const;
+] as const satisfies readonly string[];
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+type BarProps = {
+  score: PasswordScore;
+  style?: StyleProp<ViewStyle> | undefined;
+  barHeight: number;
+};
 
-export const PasswordMeter = ({
-  score: providedScore,
-  password,
-  style,
-  barHeight = 6,
-}: PasswordMeterProps) => {
-  // When `score` is provided directly, we still call the hook with an empty
-  // string. The hook's useMemo will cache the empty-string result so there
-  // is effectively zero overhead after the first render.
-  const { score: computedScore } = usePasswordRisk(
-    providedScore !== undefined ? '' : (password ?? '')
-  );
-
-  const score: PasswordScore =
-    providedScore !== undefined ? providedScore : computedScore;
-
-  // --- Animation refs ---
+const PasswordMeterBar = ({ score, style, barHeight }: BarProps) => {
   const animatedWidth = useRef(new Animated.Value(0)).current;
   const animatedColor = useRef(new Animated.Value(0)).current;
 
@@ -63,7 +53,7 @@ export const PasswordMeter = ({
       Animated.timing(animatedWidth, {
         toValue: (score / 4) * 100,
         duration: 300,
-        useNativeDriver: false, // width% cannot use native driver
+        useNativeDriver: false,
       }),
       Animated.timing(animatedColor, {
         toValue: score,
@@ -75,7 +65,7 @@ export const PasswordMeter = ({
 
   const backgroundColor = animatedColor.interpolate({
     inputRange: [0, 1, 2, 3, 4],
-    outputRange: SCORE_COLORS as unknown as string[],
+    outputRange: [...SCORE_COLORS],
   });
 
   return (
@@ -96,9 +86,45 @@ export const PasswordMeter = ({
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+type AnalyzedBarProps = {
+  password: string;
+  userInputs?: readonly (string | number)[] | undefined;
+  style?: StyleProp<ViewStyle> | undefined;
+  barHeight: number;
+};
+
+const AnalyzedPasswordMeterBar = ({
+  password,
+  userInputs,
+  style,
+  barHeight,
+}: AnalyzedBarProps) => {
+  const { score } = usePasswordRisk(password, userInputs);
+  return <PasswordMeterBar score={score} style={style} barHeight={barHeight} />;
+};
+
+export const PasswordMeter = (props: PasswordMeterProps) => {
+  const barHeight = props.barHeight ?? 6;
+
+  if ('score' in props && props.score !== undefined) {
+    return (
+      <PasswordMeterBar
+        score={props.score}
+        style={props.style}
+        barHeight={barHeight}
+      />
+    );
+  }
+
+  return (
+    <AnalyzedPasswordMeterBar
+      password={props.password}
+      userInputs={props.userInputs}
+      style={props.style}
+      barHeight={barHeight}
+    />
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
