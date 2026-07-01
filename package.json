@@ -95,8 +95,8 @@
     "jest-environment-jsdom": "^30.3.0",
     "lefthook": "^2.0.3",
     "prettier": "^3.0.0",
-    "react": "19.2.0",
-    "react-native": "0.83.2",
+    "react": "19.2.7",
+    "react-native": "0.86.0",
     "react-native-builder-bob": "^0.40.13",
     "react-test-renderer": "19.2.0",
     "release-it": "^19.0.4",
@@ -192,7 +192,7 @@
     "version": "0.57.2"
   },
   "dependencies": {
-    "@zxcvbn-ts/core": "^3.0.4",
-    "@zxcvbn-ts/language-common": "^3.0.4"
+    "@zxcvbn-ts/core": "^4.1.2",
+    "@zxcvbn-ts/language-common": "^4.1.2"
   }
 }
