@@ -3,7 +3,7 @@
 # Password Intelligence
 
 **Turkish-first, culturally-aware password strength kit for React Native.**  
-*Combines NIST entropy estimation with regional threat intelligence.*
+*Wraps the zxcvbn-ts engine with a Turkish-specific threat layer.*
 
 [![npm version](https://img.shields.io/npm/v/react-native-password-intelligence.svg?style=flat-square)](https://www.npmjs.com/package/react-native-password-intelligence)
 [![npm downloads](https://img.shields.io/npm/dm/react-native-password-intelligence.svg?style=flat-square)](https://www.npmjs.com/package/react-native-password-intelligence)
@@ -218,7 +218,7 @@ clearCustomDictionary(): void
 
 ## Score scale
 
-The scale follows **NIST SP 800-63B** entropy guidelines.
+The scale is zxcvbn-ts's 0–4 band, derived from estimated guess counts rather than character composition rules.
 
 | Score | Label | Color | UX meaning |
 |:---:|:---|:---|:---|
@@ -243,7 +243,7 @@ The scale follows **NIST SP 800-63B** entropy guidelines.
 
 | Feature | `react-native-password-intelligence` | `zxcvbn-ts` (vanilla) | `react-native-password-strength-meter` |
 |---|:---:|:---:|:---:|
-| NIST 800-63B-aligned scoring | ✅ | ✅ | ⚠️ ad-hoc |
+| Guess-count scoring (zxcvbn) | ✅ | ✅ | ⚠️ ad-hoc |
 | Turkish cultural intelligence layer | ✅ | ❌ | ❌ |
 | Dual-locale case-fold (`İ`/`I`) | ✅ | ❌ | ❌ |
 | React Native UI component | ✅ | ❌ | ✅ |
