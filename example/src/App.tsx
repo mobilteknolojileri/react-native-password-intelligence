@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, View, StyleSheet, TextInput, ScrollView } from 'react-native';
 import {
   usePasswordRisk,
   PasswordMeter,
   type PasswordScore,
 } from 'react-native-password-intelligence';
+// Imported straight from the framework-agnostic core, with no React Native in
+// its module graph. This is the live proof that `password-intelligence` works
+// standalone - CI compiles this file via `expo export --platform web`.
+import { analyzePassword } from 'password-intelligence';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -36,6 +40,10 @@ const getColor = (score: PasswordScore): string => SCORE_COLORS[score] ?? '';
 export default function App() {
   const [password, setPassword] = useState('');
   const { score, crackTimeDisplay, feedback } = usePasswordRisk(password);
+  // One direct core call per keystroke, memoized like the hook; the meter
+  // below reuses the hook's score instead of analysing a third time.
+  const coreSample = password || 'galatasaray';
+  const coreResult = useMemo(() => analyzePassword(coreSample), [coreSample]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -56,7 +64,7 @@ export default function App() {
       <View style={styles.card}>
         <Text style={styles.label}>Security Strength</Text>
 
-        <PasswordMeter password={password} />
+        <PasswordMeter score={score} />
 
         <View style={styles.statsRow}>
           <Text style={[styles.scoreLabel, { color: getColor(score) }]}>
@@ -74,6 +82,20 @@ export default function App() {
             • {suggestion}
           </Text>
         ))}
+      </View>
+
+      {/* Framework-agnostic core, called directly */}
+      <View style={styles.hintCard}>
+        <Text style={styles.hintTitle}>
+          Core engine (password-intelligence, no React Native)
+        </Text>
+        <Text style={styles.hintText}>
+          analyzePassword({JSON.stringify(coreSample)}).score ={' '}
+          {coreResult.score}
+        </Text>
+        <Text style={styles.hintText}>
+          {coreResult.feedback.warning ?? 'no warning'}
+        </Text>
       </View>
 
       {/* Pattern hint card */}

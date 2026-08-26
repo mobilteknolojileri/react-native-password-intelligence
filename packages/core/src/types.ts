@@ -1,7 +1,22 @@
 /**
- * Shared TypeScript interfaces for react-native-password-intelligence.
+ * Shared TypeScript interfaces for password-intelligence.
  */
-import type { ZxcvbnResult } from '@zxcvbn-ts/core';
+import type { TranslationKeys, ZxcvbnResult } from '@zxcvbn-ts/core';
+
+/**
+ * zxcvbn's translation shape plus per-dictionary warnings.
+ *
+ * zxcvbn only explains a dictionary match when the dictionary is one of its
+ * own well-known names (`passwords`, `lastnames`, `userInputs`, or a name
+ * containing `firstnames`/`wikipedia`); every other dictionary — all of the
+ * Turkish categories, and the `custom` dictionary — yields `warning: null`.
+ * `dictionaryWarnings` fills that gap, keyed by dictionary name, and travels
+ * with the rest of the translations so `configure({ translations })` swaps
+ * the whole feedback language at once.
+ */
+export interface PasswordIntelligenceTranslations extends TranslationKeys {
+  readonly dictionaryWarnings?: Readonly<Record<string, string>>;
+}
 
 /**
  * Zxcvbn-ts expects dictionaries as arrays of strings/numbers, ordered by frequency

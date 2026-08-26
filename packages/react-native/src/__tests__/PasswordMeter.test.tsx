@@ -8,7 +8,7 @@
 
 import { render, act } from '@testing-library/react-native';
 import { PasswordMeter } from '../ui/PasswordMeter';
-import * as analyzerModule from '../core/analyzer';
+import * as analyzerModule from 'password-intelligence';
 
 const baseResult = {
   score: 2 as const,
@@ -32,10 +32,11 @@ const baseResult = {
   password: '',
 };
 
-jest.mock('../core/analyzer', () => ({
+// Only `analyzePassword` is replaced: the hook subscribes to the real engine
+// (`subscribeToConfiguration`) and the shared jest.setup resets it.
+jest.mock('password-intelligence', () => ({
+  ...jest.requireActual<typeof analyzerModule>('password-intelligence'),
   analyzePassword: jest.fn(() => baseResult),
-  addCustomDictionary: jest.fn(),
-  clearCustomDictionary: jest.fn(),
 }));
 
 const mockedAnalyzePassword =

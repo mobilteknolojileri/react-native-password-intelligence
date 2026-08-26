@@ -2,7 +2,10 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-password-intelligence": ["./src/index"]
+      "password-intelligence": ["./packages/core/src/index.ts"],
+      "react-native-password-intelligence": [
+        "./packages/react-native/src/index.ts"
+      ]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
@@ -31,5 +34,6 @@
     "strict": true,
     "target": "ESNext",
     "verbatimModuleSyntax": true
-  }
+  },
+  "exclude": ["**/node_modules", "**/lib", "coverage", "**/.expo"]
 }
