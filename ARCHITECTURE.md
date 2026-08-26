@@ -1,51 +1,129 @@
 # Architecture
 
-This document captures the design rationale behind `react-native-password-intelligence`. It exists so a reviewer can understand *why* the code looks the way it does without reading every commit message.
+This document captures the design rationale behind `password-intelligence` and
+`react-native-password-intelligence`. It exists so a reviewer can understand *why* the code looks
+the way it does without reading every commit message.
 
 ## One-paragraph summary
 
-The library is a thin Turkish-aware adapter over [`@zxcvbn-ts/core`](https://github.com/zxcvbn-ts/zxcvbn). Three public entry points (`analyzePassword`, `usePasswordRisk`, `<PasswordMeter />`) are layered: the pure function does the work, the hook adds React memoization, and the UI component adds an animated bar. A single Turkish dictionary file feeds zxcvbn through a small `analyzer.ts` that handles initialization, custom-dictionary state, input safety, and dual-locale case-folding.
+`password-intelligence` is a thin Turkish-aware adapter over
+[`@zxcvbn-ts/core`](https://github.com/zxcvbn-ts/zxcvbn): a pure `analyzePassword` function, a
+module-global configuration layer (`configure`, custom dictionary) and one Turkish dictionary file
+that feeds zxcvbn twelve categories. `react-native-password-intelligence` re-exports that entire
+surface and adds two React bindings: `usePasswordRisk` (memoized, subscribed to the engine) and
+`<PasswordMeter />` (animated bar). The wrapper contains no zxcvbn code of its own.
 
-## Module layout
+## Repository layout
 
 ```
-src/
-├── core/
-│   └── analyzer.ts          # zxcvbn lifecycle, input guards, dual-normalize, custom dict
-├── dictionaries/
-│   └── tr.ts                # Turkish entries + buildDictionary helper
-├── translations/
-│   └── tr.ts                # Inline Turkish feedback strings (zxcvbn TranslationKeys shape)
-├── hooks/
-│   └── usePasswordRisk.ts   # Value-based memoized React hook
-├── ui/
-│   └── PasswordMeter.tsx    # Animated bar, score-mode shortcut
-├── types.ts                 # Public TypeScript types
-└── index.ts                 # Public API barrel
+packages/
+├── core/                              # password-intelligence (no react / react-native)
+│   ├── src/
+│   │   ├── core/
+│   │   │   ├── engine.ts              # options assembly, validation, dirty flag, subscriptions
+│   │   │   ├── analyzer.ts            # analyzePassword, custom dictionary API, warning fill-in
+│   │   │   └── turkishCase.ts         # the single Turkish fold used by every dictionary side
+│   │   ├── dictionaries/tr.ts         # curated source terms → four match variants each
+│   │   ├── translations/tr.ts         # zxcvbn TranslationKeys + dictionaryWarnings
+│   │   ├── data/*.generated.ts        # top-4,000 English passwords + keyboard graphs (vendored)
+│   │   ├── types.ts                   # public types
+│   │   └── index.ts                   # public barrel (exact set pinned by publicApi.test.ts)
+│   └── scripts/generate-data.mjs      # regenerates src/data from @zxcvbn-ts/language-common
+└── react-native/                      # react-native-password-intelligence
+    └── src/
+        ├── hooks/usePasswordRisk.ts   # value-memoized hook + useSyncExternalStore
+        ├── ui/PasswordMeter.tsx       # animated bar, score-mode shortcut
+        └── index.ts                   # `export * from 'password-intelligence'` + bindings
+scripts/
+├── check-size.mjs                     # gzip budget on the core ESM output
+├── check-pack.mjs                     # every manifest entry point is in the tarball
+└── sync-versions.mjs                  # lockstep versions for release-it / CI
 ```
 
-## Five design choices that drive the code
+Build is `react-native-builder-bob` per package (CJS + ESM + two `.d.ts` trees), orchestrated by
+turbo so the wrapper always builds after the core. Tests run from one root Jest config with two
+projects: `core` under a plain Node environment (the proof that the core has no React Native
+dependency) and `react-native` under the RN preset, with `password-intelligence` mapped to the
+core source.
 
-### 1. Deferred zxcvbn initialization
+## Design choices that drive the code
 
-zxcvbn's `setOptions` is a one-time, side-effecting call that builds ranked dictionaries. We register the options on the first `analyzePassword` invocation, not at module import. Reasoning:
+### 1. Lazy, dirty-flagged zxcvbn options
 
-- A consumer who imports `analyzePassword` but never calls it (e.g., behind a feature flag) pays no setup cost.
-- Combined with `sideEffects: false` in `package.json`, this means a screen that only uses `<PasswordMeter score={s} />` (precomputed score) doesn't even bundle the analyzer.
+zxcvbn keeps its options in a module-level singleton and `setOptions` is a side-effecting call
+that builds ranked dictionaries. Registering eagerly at import time would pull every dictionary
+into the module graph; requiring an explicit `init()` would create a "call this first" trap.
+Instead `configure()`, `addCustomDictionary()` and friends only record intent and set a dirty
+flag; the next `analyzePassword()` applies the assembled options synchronously and clears it.
 
-The dictionary *arrays* themselves are still built at module import (eager `buildDictionary` calls in `dictionaries/tr.ts`). True lazy dictionary loading via dynamic `import()` is a v0.4.0 candidate; the trade-off is async API surface vs cold-start cost.
+Consequences that are easy to get wrong, and are therefore pinned by tests:
 
-### 2. Dual-locale case-folding
+- `buildOptions()` emits **every** option including defaults. `Options.setOptions` only assigns
+  the keys it is given, so an omitted `useLevenshteinDistance` would keep the previous value and
+  `resetConfiguration()` could never revert it.
+- `configure()` **validates before recording**. zxcvbn's `setOptions` installs the dictionary
+  before it validates the translations, so a bad `translations` object applied lazily would poison
+  every subsequent analysis while leaving the new dictionary in place. Validation throws from
+  `configure()` itself and leaves the current configuration untouched.
+- Every state change bumps a revision counter and notifies subscribers
+  (`subscribeToConfiguration` / `getConfigurationVersion`). The hook reads it through
+  `useSyncExternalStore`, so a `configure()` that lands after the first render (typically once
+  `@zxcvbn-ts/language-common` finishes loading) re-analyses the password already on screen.
 
-Plain JavaScript `'İ'.toLowerCase()` returns `'i̇'` (lowercase i + combining dot above), which does **not** match a dictionary entry of `'i'` plus the rest of the word. Conversely, `'IBRAHIM'.toLocaleLowerCase('tr-TR')` becomes `'ıbrahım'` (dotless ı), which fails to match a dictionary entry of `'ibrahim'` (regular i).
+### 2. One Turkish fold, used on both sides of a match
 
-The library evaluates both case-foldings and returns the more pessimistic (lower-scoring) zxcvbn result. The two paths only diverge when the input contains uppercase `'I'` or `'İ'`, so the second zxcvbn call is paid rarely. This catches both keyboard layouts in normal use.
+zxcvbn lowercases the password with `String.prototype.toLowerCase()` (Unicode default casing) and
+matches it verbatim against dictionary entries. Two Turkish letters break under default casing:
+dotted `İ` becomes `i` + U+0307, and ASCII `I` becomes dotted `i` where Turkish expects dotless `ı`
+(`IŞIK` → `işik`, but the dictionary holds `ışık`).
 
-### 3. Bounded, dedup-on-write custom dictionary
+0.3.0 answered this by scoring both `toLowerCase()` and `toLocaleLowerCase('tr-TR')` and taking
+the lower score — which ran two analyses on every mixed-case password, destroyed the case profile
+zxcvbn needs for `capitalization` / `allUppercase` feedback, and still only caught `IBRAHIM` by
+accident. `core/turkishCase.ts` replaces that with two rules:
 
-`addCustomDictionary(words)` merges into a `Set<string>` rather than pushing into an array. Idempotency is "free" via Set semantics. The set is hard-capped at 10,000 entries with a `console.warn` to prevent unbounded growth in long-running mobile or SSR processes that might accidentally call the API in a render path. `clearCustomDictionary()` is exposed for test isolation and multi-tenant SSR.
+- **Dictionary side.** Every word — bundled category, `addCustomDictionary` entry or per-call
+  `userInputs` string — is expanded by `expandTurkishVariants` into Turkish, compact, ASCII-folded
+  and compact-ASCII forms (`Ömer Asaf` → `ömer asaf`, `ömerasaf`, `omer asaf`, `omerasaf`). The
+  lowercasing is locale-independent (`I` → `ı`, `İ` → `i`, then default casing) so it does not
+  depend on the engine's ICU data.
+- **Password side.** `repairTurkishCase` returns the input unchanged unless default casing would
+  miss: a dotted `İ`, or an ASCII `I` next to another Turkish letter. Only then is an ASCII-folded
+  copy scored as a second pass. The fold keeps every character's case, the lower score wins and
+  `result.password` always echoes the input.
 
-### 4. Discriminated-union `<PasswordMeter />` props
+The bundled dictionary output is byte-identical to the previous hand-written helper; the
+difference is that custom words and `userInputs` now share it instead of using plain
+`toLowerCase()`, which could never meet the repaired password.
+
+### 3. Warnings that follow zxcvbn's own rules
+
+zxcvbn only explains a dictionary match when the dictionary has one of its well-known names
+(`passwords`, `lastnames`, `userInputs`, or a name containing `firstnames` / `wikipedia`).
+Every other dictionary yields `warning: null`, which for a Turkish-first library means the
+headline feature would reject `galatasaray` and say nothing. `analyzer.ts` fills the gap from
+`translations.dictionaryWarnings` (keyed by dictionary name) using the longest matching token —
+but only where zxcvbn itself would warn, i.e. never for a password that already scores 3 or 4,
+and only for own properties (a consumer dictionary named `constructor` must not surface
+`Object`). The Turkish first-name dictionary is named `turkish_firstnames` on purpose: the
+`firstnames` substring is what makes zxcvbn explain it natively.
+
+The warnings live inside the translations object rather than a parallel table so
+`configure({ translations })` swaps the whole feedback language at once and can never produce
+mixed-language feedback. (zxcvbn's `checkCustomTranslations` only requires its own keys to be
+present; extra keys are fine.)
+
+### 4. Bounded, dedup-on-write custom dictionary
+
+`addCustomDictionary(words)` merges into a `Set<string>`, so idempotency is free, and is
+hard-capped at 10,000 source words with a `console.warn` to prevent unbounded growth in
+long-running mobile or SSR processes. Entries are registered as a real zxcvbn dictionary named
+`custom` (applied last so nothing can shadow it), not re-spread into `userInputs` on every call,
+so a large list costs nothing per keystroke. No-op additions and clears do not mark the engine
+dirty. `clearCustomDictionary()` exists for test isolation and multi-tenant SSR; `resetConfiguration()`
+deliberately does not touch it.
+
+### 5. Discriminated-union `<PasswordMeter />` props
 
 ```ts
 type PasswordMeterProps =
@@ -53,86 +131,121 @@ type PasswordMeterProps =
   | { score: PasswordScore; password?: never; userInputs?: never };
 ```
 
-Two reasons:
+Providing neither prop is a type error, and the component splits into `PasswordMeterBar` (the
+animated bar) and `AnalyzedPasswordMeterBar` (which calls the hook). With `score` the hook is never
+called and the analyzer is never initialized, so precomputed-score usage is strictly free of
+zxcvbn cost — the example app uses this to avoid analysing the same password twice.
 
-- It's a TypeScript error to provide neither prop. A reviewer can grep for `PasswordMeter` and know every usage is well-formed.
-- The component splits internally into `PasswordMeterBar` (the animated bar) and `AnalyzedPasswordMeterBar` (which calls the hook). When `score` is provided directly, only the bar renders — the hook is never called, and the analyzer is never initialized. This makes precomputed-score usage strictly free of zxcvbn cost.
+### 6. Value-based hook memoization
 
-### 5. Value-based hook memoization
+`useMemo` compares dependencies by reference, so an inline `userInputs={[user.firstName]}` would
+recompute every render. The hook keys on `JSON.stringify(userInputs)` and deserializes inside the
+memo, so it never closes over the outer array. The configuration revision is the third key, which
+is what lets a late `configure()` invalidate a result whose inputs did not change.
 
-React `useMemo` checks dependencies by reference. If a consumer writes:
+## Categorization rationale (`packages/core/src/dictionaries/tr.ts`)
 
-```tsx
-<PasswordMeter password={pw} userInputs={[user.firstName, user.email]} />
-```
-
-…the inline array has a new identity every render, which would cause the hook to recompute every render and (for some consumers) infinitely re-render. We sidestep this by computing `inputsKey = JSON.stringify(userInputs)` and using the string as the memoization dependency. The closure body deserializes the key with `JSON.parse(inputsKey)` so we never read the outer `userInputs` reference inside the memo — no stale-closure risk and no `eslint-disable` directive.
-
-## Categorization rationale (`src/dictionaries/tr.ts`)
-
-Eleven categories. Each one corresponds to a documented threat-intelligence pattern in publicly disclosed Turkish password breach corpora:
+Twelve categories. Each one corresponds to a documented threat-intelligence pattern in publicly
+disclosed Turkish password breach corpora:
 
 | Category | Why it earns its own entry |
 |---|---|
-| `commonNames` | First names dominate Turkish breach top-100s. |
+| `commonNames` | First names dominate Turkish breach top-100s. Registered as `turkish_firstnames`. |
 | `commonSurnames` | TÜİK / NVI top-surname distribution maps directly to password reuse. |
 | `footballTeams` | Galatasaray / Fenerbahçe / Beşiktaş founding years are heavily reused. |
 | `cityNames` | Province-of-residence appears in low-effort password choices. |
 | `platePatterns` | Plate-code + city is a culturally-specific composite pattern. |
-| `keyboardWalks` | Universal but worth keeping in the Turkish set so `qweasd` is flagged out of the box. |
+| `keyboardWalks` | Literal walks; the spatial matcher (six vendored layouts) covers the rest. |
 | `culturalKeywords` | Republic-era dates (1453, 1923) and national symbols. |
-| `romanticTerms` | "aşkım", "canım", "hayatım" rank above name-only passwords in some breach datasets. |
-| `religiousNationalistic` | Threat-intel category. Inclusion reflects observed compromise data; not endorsement. Documented inline. |
+| `romanticTerms` | "aşkım", "canım", "hayatım" rank above name-only passwords in some datasets. |
+| `religiousNationalistic` | Threat-intel category. Inclusion reflects observed compromise data; not endorsement. |
+| `commonPasswords` | Turkish equivalents of `password` / `admin` plus the universal top entries. |
 | `zodiacSigns` | Birth-related passwords. Twelve-entry list. |
 | `brands` | Telecom, banking, retail, online-services brand names appear in 3–5% of Turkish breach samples. |
 
-Each raw array is fed through `buildDictionary`, which generates four variants per entry (base, compact, ASCII fallback, compact ASCII). Variants are deduplicated within a category via a `Set`. A future addition could deduplicate across categories, but the runtime cost of zxcvbn matching the same token across multiple ranked dictionaries is negligible.
+Source terms are written in natural Turkish casing; `buildDictionary` derives the variants
+(section 2) and deduplicates within a category while preserving first-seen order, which is what
+zxcvbn ranks by.
+
+## Bundle strategy
+
+0.3.0 statically imported `@zxcvbn-ts/language-common` (229 kB gzip) and Metro does not
+tree-shake, so every consumer paid for it. The core now vendors a frequency-ordered top-4,000
+slice of the password list and the six keyboard graphs (`packages/core/src/data`, regenerated by
+`generate:data` and byte-checked in CI). The measured cost is a false-strong rate under 5% on
+leaked passwords beyond the cutoff (`dictionaryParity.test.ts` enforces the budget), and the fix
+is two lines: `configure({ dictionaries, graphs })` with the full package loaded lazily. CI gates
+the core ESM output at 40 kB gzip (`scripts/check-size.mjs`; ~34 kB today, `@zxcvbn-ts/core` adds
+~20 kB).
+
+Package exports are `import` / `require` only. A `react-native` condition pointing at the ESM
+build was dropped on purpose: React Native's Jest preset resolves with `['require',
+'react-native']` and would have received untransformed `export` statements. Metro still gets ESM
+through `import`.
 
 ## Why a single locale (today)
 
-The library is published as Turkish-first, not "i18n-extensible." This is a deliberate trade-off:
+The library is published as Turkish-first, not "i18n-extensible":
 
-- **For the user**: deep Turkish coverage now beats shallow multi-locale stubs that don't actually catch breach-corpus patterns.
-- **For the maintainer**: a one-locale build avoids designing a plugin API before the second locale exists. (The "second-system effect" is real.)
-- **For the future**: when a second locale is ready (Arabic and Persian are the natural candidates given the user base), the architecture refactor becomes a v0.4.0 work item: rename `dictionaries/tr.ts` to `dictionaries/tr/index.ts`, add a `Locale` interface, expose `setLocale()` or `addLocale()` as a public API, register dictionaries dynamically.
-
-Until then, "locale extension" means contributing Turkish dictionary entries (PRs welcome) or forking with a new dictionary file.
+- **For the user**: deep Turkish coverage now beats shallow multi-locale stubs.
+- **For the maintainer**: one locale avoids designing a plugin API before the second locale
+  exists. `configure({ dictionaries, translations })` already lets a consumer add any corpus and
+  feedback language at runtime.
+- **For the future**: a first-class locale abstraction is a 1.0.0 work item (see ROADMAP.md).
 
 ## Performance budget
 
-- **First analysis (cold)**: ~30–80 ms on a mid-range Android device. Dominated by `buildDictionary` (eager array construction) plus `zxcvbnOptions.setOptions` (rank-table build).
-- **Subsequent analysis (warm)**: ~1–10 ms typical, ~50 ms worst case for inputs that hit both the standard and Turkish-locale case-fold paths.
-- **Hook re-render (same input)**: a single `JSON.parse` of the cached key string. Effectively free.
+- **First analysis (cold)**: ~30–80 ms on a mid-range Android device — `zxcvbnOptions.setOptions`
+  building the rank tables. Re-applying options after `configure()` is ~1 ms for the bundled
+  dictionaries, ~8 ms with the full `language-common` set.
+- **Subsequent analysis (warm)**: ~1–10 ms typical, ~50 ms worst case for inputs that trigger the
+  case-repair second pass.
+- **Hook re-render (same input)**: a single `JSON.parse` of the cached key. Effectively free.
 - **`<PasswordMeter score={s} />`**: no analyzer cost. Animation only.
-- **Bundle size**: ~30 KB minified for the full library. The `commonDictionary` from `@zxcvbn-ts/language-common` adds ~200 KB unminified but is shared with any other zxcvbn-ts consumer in the same bundle.
 
 ## Test strategy
 
-127+ tests covering:
+210+ tests across the two Jest projects, all starting from a reset engine (`jest.setup.ts` in
+each package):
 
-- Score thresholds for representative inputs in every dictionary category.
-- Turkish Unicode edge cases (dotted/dotless I both keyboard layouts, NFC/NFD, surrogate emoji, RTL override, paste-with-newline).
-- `addCustomDictionary` idempotency, bounded growth, empty-input handling, and `clearCustomDictionary` round-trip.
-- Long-input safety (50 KB pathological paste, 2,048-char input, behavioral truncation verification).
-- Malformed-input type guards (null, undefined, number, object).
-- React hook memoization (reference vs value, inline array stability).
-- `<PasswordMeter />` score-mode shortcut (analyzer NOT called when score prop is provided, verified via jest mock-call inspection).
-- A 30-input score-regression snapshot fixture so deliberate dictionary or scoring shifts must be reviewed and acknowledged.
+- A 30-input score-regression snapshot (`analyzer.test.ts`) so deliberate dictionary or scoring
+  shifts must be reviewed and acknowledged.
+- Turkish case handling end to end: fold helpers, `repairTurkishCase` triggers, all-caps words with
+  ASCII `I`, custom words and `userInputs` containing `İ` / `ı`.
+- Feedback: every Turkish category explains itself at score 0–2 and stays silent at 3–4;
+  prototype-named dictionaries are ignored.
+- Configuration: validation, merge semantics, a real reset of the zxcvbn singleton, translation
+  swaps that never mix languages, change notifications and their no-op cases.
+- Structural guards: the exact public export set of each package, the wrapper never importing
+  `@zxcvbn-ts/*` directly (a second `zxcvbnOptions` singleton would silently ignore
+  `configure()`), keyboard graphs actually reaching the spatial matcher, generated data matching its
+  generator, and the lite-dictionary false-strong budget.
+- React bindings: value-based memoization, re-analysis on `configure()` / `addCustomDictionary()`
+  after mount, and the score-mode shortcut never touching the analyzer.
 
-Coverage is gated at 85% lines / 80% functions / 75% branches / 85% statements. Actual numbers track 99 / 100 / 94 / 99 at v0.3.0 release.
+Coverage is gated globally at 85% lines / 80% functions / 75% branches / 85% statements, with
+`collectCoverageFrom` at the root so files no test imports still count against the gate.
 
 ## Release safety
 
-- `prepublishOnly` runs `yarn lint && yarn typecheck && yarn test && yarn prepare` before any `npm publish`.
-- The release workflow (`.github/workflows/release.yml`) runs the same gauntlet plus `npm pack --dry-run` and publishes with `--provenance` and OIDC `id-token: write` so SLSA attestation lands on every tarball.
-- Dependabot proposes weekly dependency PRs (root, example workspace, GitHub Actions).
-- The `score-regression` snapshot fixture is a dictionary-update tripwire: any PR that shifts a pinned score must update the fixture intentionally, which surfaces in code review.
+- CI (`ci.yml`) runs lint, typecheck, generated-data verification, tests with coverage, the build,
+  the gzip budget and the tarball check, then installs the packed core into a scratch project on
+  Node 18/20/22/24 and exercises both `require` and `import`.
+- Both packages ship in lockstep on one version. `yarn release` (release-it) bumps the root
+  `package.json` and `scripts/sync-versions.mjs` propagates it to `packages/*` and to the wrapper's
+  dependency range before the release commit; the release workflow refuses a tag whose packages
+  disagree.
+- The release workflow re-runs the full gauntlet, publishes the core before the wrapper (the
+  wrapper depends on the published core) with `--provenance` via OIDC trusted publishing, and
+  attaches the tarballs and SHA-256 checksums to the GitHub release. The very first publish of a
+  new package name has to be done manually with a token, because npm trusted publishers can only
+  be configured on a package that already exists (see CONTRIBUTING.md).
+- Dependabot proposes monthly grouped dependency PRs.
 
 ## What's intentionally out of scope
 
 - Password generation (would require a CSPRNG-backed entropy source and policy engine).
 - Server-side validation (the score is a UX hint, not an authorization gate).
-- Storage / hashing (use `bcrypt`, `argon2`, or your auth provider).
-- Multi-locale plugin API (v0.4.0).
-- Dynamic-import lazy dictionary loading (v0.4.0; needs an async API surface).
+- Storage / hashing (use Argon2id per RFC 9106, or your auth provider).
+- Multi-locale plugin API (1.0.0).
 - Profanity dictionary (curatorial overhead and abuse-policy risk outweigh threat-intel value at this scale).
