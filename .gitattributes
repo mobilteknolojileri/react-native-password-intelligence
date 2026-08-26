@@ -1,3 +1,15 @@
+# The repository stores LF for every text file (.editorconfig agrees). Without
+# this, a Windows clone with core.autocrlf=true checks files out as CRLF and
+# prettier then flags every line, even though the committed blobs are fine.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.ico binary
+*.ttf binary
+*.tgz binary
+
 *.pbxproj -text
+
 # specific for windows script files
 *.bat text eol=crlf
