@@ -3,12 +3,17 @@ on:
   push:
     branches:
       - main
+      - 'feat/**'
+      - 'fix/**'
   pull_request:
     branches:
       - main
   merge_group:
     types:
       - checks_requested
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -31,12 +36,16 @@ jobs:
       - name: Typecheck files
         run: yarn typecheck
 
+      # Catches a dependency bump silently changing the vendored password list.
+      - name: Verify generated data matches its generator
+        run: yarn verify:data
+
   test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -44,25 +53,105 @@ jobs:
       - name: Run unit tests
         run: yarn test --maxWorkers=2 --coverage
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   build-library:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Build package
-        run: yarn prepare
+      - name: Build packages
+        run: yarn build
+
+      - name: Check core bundle size budget
+        run: node scripts/check-size.mjs
+
+      - name: Verify published tarball contents
+        run: node scripts/check-pack.mjs
+
+      - name: Pack tarballs for the compatibility matrix
+        run: |
+          mkdir -p dist-tarballs
+          for pkg in packages/core packages/react-native; do
+            tarball=$(cd "$pkg" && npm pack --ignore-scripts --silent)
+            mv "$pkg/$tarball" dist-tarballs/
+          done
+          ls -la dist-tarballs
+
+      - name: Upload tarballs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tarballs
+          path: dist-tarballs/*.tgz
+          retention-days: 1
+
+  # Validates the `engines.node: ">=18"` claim on the PUBLISHED artifact rather
+  # than on the dev toolchain (which needs Node 20+ for react-native-builder-bob).
+  # Only the core package is exercised: the wrapper needs react-native, which is
+  # Flow-typed and not loadable by bare Node.
+  compat:
+    needs: build-library
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18', '20', '22', '24']
+
+    steps:
+      - name: Download tarballs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarballs
+          path: dist-tarballs
+
+      - name: Setup Node ${{ matrix.node-version }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install the packed core into a scratch project
+        run: |
+          mkdir -p /tmp/compat && cd /tmp/compat
+          npm init -y > /dev/null
+          npm install "$GITHUB_WORKSPACE"/dist-tarballs/password-intelligence-*.tgz
+
+      - name: Require from CommonJS
+        working-directory: /tmp/compat
+        run: |
+          node -e "
+            const { analyzePassword, configure } = require('password-intelligence');
+            const result = analyzePassword('galatasaray1905');
+            if (typeof result.score !== 'number') throw new Error('no score');
+            if (typeof configure !== 'function') throw new Error('configure missing');
+            console.log('cjs ok, score =', result.score);
+          "
+
+      - name: Import from ESM
+        working-directory: /tmp/compat
+        run: |
+          node --input-type=module -e "
+            import { analyzePassword } from 'password-intelligence';
+            const result = analyzePassword('mehmet1907');
+            if (result.feedback.warning === null) throw new Error('no Turkish warning');
+            console.log('esm ok, warning =', result.feedback.warning);
+          "
 
   build-web:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup
         uses: ./.github/actions/setup

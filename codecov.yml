@@ -1,0 +1,23 @@
+# Coverage is a signal, not a gate that blocks unrelated work: the jest
+# coverageThreshold in jest.config.js is the hard gate (85/80/75/85).
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        informational: true
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        informational: true
+
+comment:
+  layout: 'reach, diff, files'
+  require_changes: true
+
+ignore:
+  - 'packages/core/src/data/*.generated.ts'
+  - 'example/**'
+  - '**/lib/**'
