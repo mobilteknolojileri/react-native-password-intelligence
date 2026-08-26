@@ -5,6 +5,156 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.4.0] - unreleased
+
+### Changed
+
+- **BREAKING (bundle + scoring): the default no longer bundles the full English password list.**
+  0.3.0 statically imported `@zxcvbn-ts/language-common`, forcing **229 kB gzip** of dictionary
+  data (49,233 passwords + 7,776 diceware words) into every consumer's bundle. Metro does not
+  tree-shake, so React Native apps had no way to opt out. 0.4.0 vendors a frequency-ordered
+  **top-4,000** slice instead. The published bundle drops from **236.3 kB to ~34 kB gzip (7x
+  smaller)** for the core package's own code (`@zxcvbn-ts/core` adds ~20 kB either way).
+
+  **What this costs you:** passwords ranked 4,000-49,233 no longer match. Measured over a sample
+  of 1,223 real leaked passwords beyond the cutoff, **3.4% now score 3 or higher** (0% with the
+  full list). Restore full parity in two lines:
+
+  ```sh
+  yarn add @zxcvbn-ts/language-common
+  ```
+  ```ts
+  import { configure } from 'react-native-password-intelligence';
+  import { dictionary, adjacencyGraphs } from '@zxcvbn-ts/language-common';
+
+  configure({ dictionaries: dictionary, graphs: adjacencyGraphs });
+  ```
+
+  If you gate account creation on `score >= 3`, either restore the full dictionary or move the
+  check server-side against a breach corpus (HIBP k-anonymity).
+
+- **Passwords are no longer lowercased before scoring.** 0.3.0 scored both `toLowerCase()` and
+  `toLocaleLowerCase('tr-TR')` and returned the lower score, which discarded uppercase entropy on
+  every mixed-case password and made zxcvbn's `capitalization` / `allUppercase` suggestions
+  unreachable. Mixed-case passwords now score **higher** (correctly): `SunFlower77` 2 -> 3,
+  `QwErTy123` 0 -> 1. Turkish detection is unaffected - see the `İ` repair under *Fixed*.
+
+- `raw.sequence[].dictionaryName` for custom-dictionary hits changed from `userInputs` to `custom`,
+  and the Turkish first-name dictionary is now `turkish_firstnames` instead of `turkish_names`
+  (`firstnames` in the name is what makes zxcvbn explain the match). The other `turkish_*` names
+  are unchanged.
+
+### Added
+
+- **New package [`password-intelligence`](https://www.npmjs.com/package/password-intelligence)** -
+  the same engine with **no react or react-native dependency**, for Node, Next.js, plain React and
+  any other JS runtime. `react-native-password-intelligence` is now a thin wrapper around it and
+  re-exports the entire core surface, so existing imports keep working unchanged.
+
+  | You are building | Install |
+  |---|---|
+  | React Native / Expo app | `react-native-password-intelligence` |
+  | Node backend, Next.js, plain React, CLI | `password-intelligence` |
+
+- **CommonJS output.** 0.3.0 shipped ESM only with `main` pointing at an ESM file, so
+  `require('react-native-password-intelligence')` threw. Both packages now ship CJS + ESM with
+  `import`/`require` export conditions, plus a top-level `module` field (which is also what
+  Bundlephobia's "exports ES6 modules" check reads). There is deliberately no `react-native`
+  condition: React Native's Jest preset resolves with `['require', 'react-native']` and a
+  `react-native` condition pointing at the ESM build would hand it untransformed `export`
+  statements. Metro (`import`) still gets ESM.
+
+- **`configure(config)` and `resetConfiguration()`** for swapping dictionaries, keyboard graphs,
+  translations and `maxLength`. Valid at any time, including after the first analysis - options are
+  re-applied lazily, so there is no "call this first" trap and `analyzePassword` stays synchronous.
+  Options are validated synchronously: an invalid `maxLength`, `translations` or dictionary throws
+  from `configure()` itself and leaves the current configuration untouched. `translations` accepts
+  an optional `dictionaryWarnings` map so the Turkish-category warnings are translated together
+  with zxcvbn's own strings (and never mixed with them).
+
+- **`subscribeToConfiguration(listener)` and `getConfigurationVersion()`** for consumers that cache
+  results. `usePasswordRisk` (and therefore `<PasswordMeter password>`) subscribes, so a
+  `configure()` or `addCustomDictionary()` call that lands after the first render re-analyses the
+  password on screen instead of leaving a stale score.
+
+- **A `Standards` section in the README** describing how the library maps onto NIST SP 800-63B
+  §3.1.1.2 (blocklist + subscriber guidance), and where the client/server boundary lies.
+
+### Fixed
+
+- **`clearCustomDictionary` is now exported.** It was documented in the 0.3.0 README as public API
+  but was missing from the barrel, so the documented import failed. `PasswordMeterProps` was
+  likewise documented as exported and is now genuinely exported.
+
+- **Keyboard-walk detection actually works.** The engine never passed `graphs` to
+  `zxcvbnOptions.setOptions`, and zxcvbn defaults to `graphs = {}`, so the spatial matcher produced
+  zero matches - the advertised feature was dead. Walks that are not literal dictionary entries were
+  scored as if random: `xcvbnm,./` 3 -> 1, `qwertzuiop` 2 -> 1, `tgbnhyujm` 3 -> 2.
+
+- **Turkish matches now explain themselves.** zxcvbn only emits a dictionary warning for its own
+  well-known dictionary names, so all twelve Turkish categories returned `feedback.warning: null` -
+  the library's headline feature scored a password 0 and told the user nothing.
+  `galatasaray`, `mehmet`, `istanbul`, `askim`, `turkcell` and the rest now return category-specific
+  Turkish warnings. **If you branch on `warning === null`, that branch changes behaviour.**
+
+- **Turkish case handling is both more correct and cheaper.** The old dual-locale fold ran a
+  second full analysis on every mixed-case password; worse, `toLocaleLowerCase('tr-TR')` maps ASCII
+  `I` to dotless `ı`, so `IBRAHIM` and `ISTANBUL34` only scored correctly by accident. The password
+  is now scored as typed, and an ASCII-folded copy is scored only when Unicode default casing would
+  miss a Turkish entry: a dotted `İ` (which lowercases to `i` + U+0307) or an ASCII `I` next to
+  another Turkish letter (`ŞANLIURFA` lowercases to `şanliurfa`, matching neither `şanlıurfa` nor
+  `sanliurfa`). Custom dictionary words and per-call `userInputs` go through the same fold as the
+  bundled categories, so `addCustomDictionary(['İkbalcan'])` matches `ikbalcan`, `IKBALCAN` and
+  `İkbalcan` alike.
+
+- **Turkish category warnings respect zxcvbn's score gate.** They are only added where zxcvbn
+  itself would warn (score 0-2), so a strong passphrase that happens to contain `istanbul` no
+  longer shows a warning under a green meter.
+
+- **`resetConfiguration()` really resets.** `useLevenshteinDistance` / `levenshteinThreshold` were
+  only ever written to the zxcvbn singleton when set, so a reset could not revert them.
+
+- **`yarn release` bumps every package.** release-it only bumps the root `package.json`;
+  `scripts/sync-versions.mjs` now propagates the version and the wrapper's dependency range in its
+  `after:bump` hook, and the release workflow refuses a tag whose packages disagree.
+
+- **The custom dictionary is registered once, not re-spread on every keystroke.** 0.3.0 spread up to
+  10,000 entries into `userInputs` on every call; entries are now a real zxcvbn dictionary applied
+  on change (measured: 1,200 analyses 17.9 s -> 14.5 s at the 10k cap).
+
+- **Stale `userInputs` no longer leak between calls.** zxcvbn leaves the previous call's user inputs
+  active when the argument is omitted; `analyzePassword` now always passes an array.
+
+- Corrected the standards claims. The 0.3.0 README stated the score scale *"follows NIST SP 800-63B
+  entropy guidelines"* - 800-63B defines no such scale and §3.1.1.2 explicitly moves away from
+  entropy and composition rules. Storage guidance now follows the OWASP Password Storage Cheat
+  Sheet ordering (Argon2id per RFC 9106 first, bcrypt for legacy systems only).
+
+- Corrected the tree-shaking claim in the README and ARCHITECTURE: `sideEffects: false` never
+  removed the `language-common` import, because deferring the *call* does not defer the *import*.
+
+### Migration from 0.3.x to 0.4.0
+
+1. **No import changes are required.** `react-native-password-intelligence` re-exports the full core
+   surface.
+2. **Re-baseline any score assertions in your own tests.** Mixed-case passwords score higher,
+   keyboard walks score lower, and passwords beyond the top-4,000 English list score higher.
+3. **Check any `feedback.warning === null` branches** - Turkish matches now return a string at
+   score 0-2 (never at 3-4, like zxcvbn's own warnings).
+4. **Decide on the dictionary trade-off.** Keep the 5.2x smaller default, or restore full coverage
+   with `configure()` as shown above.
+5. If you `require()`d the package and worked around the ESM-only build, you can drop the
+   workaround.
+6. `configure()` now throws synchronously on an invalid option instead of failing inside the next
+   `analyzePassword` call. If you switched the feedback language via `zxcvbnOptions.setOptions`,
+   use `configure({ translations })` - direct `setOptions` calls are overwritten the next time the
+   engine re-applies its options.
+
+The 30-input score-regression snapshot in `analyzer.test.ts` is **unchanged** - all 30 pinned
+fixtures score identically before and after every change in this release.
+
 ## [0.3.0] - 2026-05-02
 
 ### Added

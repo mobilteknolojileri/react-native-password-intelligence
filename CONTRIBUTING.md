@@ -4,10 +4,10 @@ Contributions to `react-native-password-intelligence` are welcome. We aim to mai
 
 ## Philosophy: Localized Threat Intelligence
 
-Our primary goal is accurate password strength estimation through cultural context. We focus on Turkish password habits (names, cities, sports, keyboard patterns) mapped against NIST 800-63B guidelines.
+Our primary goal is accurate password strength estimation through cultural context. We focus on Turkish password habits (names, cities, sports, keyboard patterns), assembled as a regional blocklist corpus in the sense of NIST SP 800-63B §3.1.1.2.
 
-### 1. Dictionary Contributions (`src/dictionaries/tr.ts`)
-We categorize patterns (e.g., `names`, `teams`, `slang`). Entries must be lowercase and possessing a statistically significant role in known credential stuffing attacks.
+### 1. Dictionary Contributions (`packages/core/src/dictionaries/tr.ts`)
+We categorize patterns (e.g., `names`, `teams`, `slang`). Write entries in their natural Turkish casing (`İstanbul`, `Şanlıurfa`); `buildDictionary` derives the lowercase, compact and ASCII-folded variants. Entries must play a statistically significant role in known credential stuffing attacks.
 
 ### 2. Code Contributions
 - **Headless Core**: Logic must remain decoupled from presentation.
@@ -33,7 +33,25 @@ This project uses [Yarn workspaces](https://yarnpkg.com/features/workspaces).
    yarn typecheck
    yarn lint
    yarn test
+   yarn build && node scripts/check-size.mjs && node scripts/check-pack.mjs
    ```
+
+## Releasing
+
+Both packages ship in lockstep on one version.
+
+1. `yarn release` (release-it) bumps the root `package.json`, runs `scripts/sync-versions.mjs` to
+   propagate the version to `packages/*` and to the wrapper's `password-intelligence` range,
+   refreshes `yarn.lock`, commits, tags `vX.Y.Z` and pushes.
+2. The tag triggers `.github/workflows/release.yml`, which re-verifies everything, refuses a tag
+   whose package versions disagree (`node scripts/sync-versions.mjs --check --tag vX.Y.Z`), then
+   publishes `password-intelligence` first (the wrapper depends on it) and the wrapper second, both
+   with npm provenance via OIDC trusted publishing.
+3. **First publish of a new package name**: npm trusted publishers can only be configured on a
+   package that already exists on the registry. Publish the very first version of a new package
+   manually with a granular access token (`npm publish --access public` from the built package
+   directory), then add the GitHub Actions trusted publisher in the package settings before the
+   next tag.
 
 ## Commit Conventions
 

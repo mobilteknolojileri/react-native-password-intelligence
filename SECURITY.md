@@ -4,13 +4,13 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| 0.2.x   | :x: (please upgrade)            |
-| < 0.2   | :x:                |
+| 0.4.x   | :white_check_mark: |
+| 0.3.x   | :x: (please upgrade)            |
+| < 0.3   | :x:                |
 
 ## Reporting a Vulnerability
 
-If you believe you have found a security vulnerability in `react-native-password-intelligence`, please **do not open a public issue**. Instead, report it privately so we can investigate and ship a fix before details become public.
+If you believe you have found a security vulnerability in `password-intelligence` or `react-native-password-intelligence`, please **do not open a public issue**. Instead, report it privately so we can investigate and ship a fix before details become public.
 
 **Preferred:** open a [GitHub private security advisory](https://github.com/mobilteknolojileri/react-native-password-intelligence/security/advisories/new).
 
@@ -32,8 +32,8 @@ Please include:
 ## Scope
 
 In scope:
-- The runtime code in `src/**/*.ts` and `src/**/*.tsx` shipped to npm under `react-native-password-intelligence`.
-- Dictionary files in `src/dictionaries/` (e.g., entries that could enable injection or DoS).
+- The runtime code in `packages/core/src` and `packages/react-native/src` shipped to npm as `password-intelligence` and `react-native-password-intelligence`.
+- Dictionary and generated data files in `packages/core/src/dictionaries/` and `packages/core/src/data/` (e.g., entries that could enable injection or DoS).
 
 Out of scope:
 - Vulnerabilities in upstream dependencies (`@zxcvbn-ts/core`, etc.) — please report those upstream.
@@ -42,7 +42,7 @@ Out of scope:
 
 ## Hardening Notes for Consumers
 
-- This library performs entropy-based estimation and pattern matching only. It does **not** transmit, persist, or hash the analyzed password.
-- Inputs longer than 1,024 characters are truncated before being passed to the underlying matcher to prevent O(n²) cost on pathological inputs.
+- This library performs guess-count estimation and pattern matching only. It does **not** transmit, persist, or hash the analyzed password.
+- Inputs longer than 1,024 characters (configurable via `configure({ maxLength })`, which only accepts a positive integer) are truncated before being passed to the underlying matcher to prevent O(n²) cost on pathological inputs.
 - `addCustomDictionary` is bounded at 10,000 entries to prevent unbounded growth in long-running processes.
 - Treat `feedback.warning` / `feedback.suggestions` as advisory; rely on `score` for security-relevant gating logic.

@@ -16,11 +16,11 @@
 [![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Web-lightgrey?style=flat-square)](https://reactnative.dev/)
 [![React Native Directory](https://img.shields.io/badge/React%20Native%20Directory-listed-0366d6?style=flat-square)](https://reactnative.directory/package/react-native-password-intelligence)
 
-<img src="./.github/assets/demo.png" alt="Password Intelligence demo" width="380" />
+<img src="https://raw.githubusercontent.com/mobilteknolojileri/react-native-password-intelligence/main/.github/assets/demo.png" alt="Password Intelligence demo" width="380" />
 
 ### [▶ Try it live](https://mobilteknolojileri.github.io/react-native-password-intelligence/)
 
-**English** · [Türkçe](./README.tr.md)
+**English** · [Türkçe](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/README.tr.md)
 
 </div>
 
@@ -362,19 +362,19 @@ imposed"* — so do not layer character-class rules on top of this score.
 
 ## Migration & Changelog
 
-Upgrade notes (including the 0.3.x → 0.4.0 migration and how to switch the feedback language) live in [CHANGELOG.md](./CHANGELOG.md). Architecture rationale is in [ARCHITECTURE.md](./ARCHITECTURE.md).
+Upgrade notes (including the 0.3.x → 0.4.0 migration and how to switch the feedback language) live in [CHANGELOG.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/CHANGELOG.md). Architecture rationale is in [ARCHITECTURE.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/ARCHITECTURE.md).
 
 ## Security
 
-Disclosure process and supported versions: [SECURITY.md](./SECURITY.md).
+Disclosure process and supported versions: [SECURITY.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/SECURITY.md).
 
 ## Contributing
 
-Contributions for new dictionary entries, surname-list updates, or bug fixes are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). For repo-wide commit hygiene see [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md).
+Contributions for new dictionary entries, surname-list updates, or bug fixes are welcome — see [CONTRIBUTING.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/CONTRIBUTING.md). For repo-wide commit hygiene see [COMMIT_CONVENTION.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/COMMIT_CONVENTION.md).
 
 ## Roadmap
 
-1.0.0 goals and what is explicitly out of scope: [ROADMAP.md](./ROADMAP.md).
+1.0.0 goals and what is explicitly out of scope: [ROADMAP.md](https://github.com/mobilteknolojileri/react-native-password-intelligence/blob/main/ROADMAP.md).
 
 ## License
 
