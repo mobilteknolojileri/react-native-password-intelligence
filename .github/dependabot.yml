@@ -9,11 +9,14 @@ updates:
       time: "03:00"
       timezone: Europe/Istanbul
     open-pull-requests-limit: 3
+    # `include: scope` is deliberately absent: Dependabot already emits a
+    # `(deps)` / `(deps-dev)` scope of its own, so enabling it produced titles
+    # like `ci(deps): ...` -> `chore(deps)(deps-dev): ...`, which violates the
+    # single-scope rule in COMMIT_CONVENTION.md and fails commitlint.
     commit-message:
       prefix: "ci"
-      include: scope
 
-  # Root npm — security patches and curated minor updates
+  # Workspace root — shared dev toolchain
   - package-ecosystem: npm
     directory: "/"
     schedule:
@@ -23,8 +26,29 @@ updates:
       timezone: Europe/Istanbul
     open-pull-requests-limit: 3
     commit-message:
-      prefix: "chore(deps)"
-      include: scope
+      prefix: "chore"
+    groups:
+      production-dependencies:
+        dependency-type: production
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - patch
+          - minor
+
+  # Published packages — their dependencies ship to consumers
+  - package-ecosystem: npm
+    directories:
+      - "/packages/core"
+      - "/packages/react-native"
+    schedule:
+      interval: monthly
+      day: monday
+      time: "03:00"
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore"
     groups:
       production-dependencies:
         dependency-type: production

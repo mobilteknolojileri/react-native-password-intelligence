@@ -5,6 +5,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -18,7 +21,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -30,36 +33,63 @@ jobs:
       - name: Use latest npm (required for trusted publisher oidc)
         run: npm install -g npm@latest
 
+      # release-it bumps only the root package.json; packages/* are synced by
+      # scripts/sync-versions.mjs in its after:bump hook. Publishing a tag
+      # whose packages are still on the previous version would fail with E403
+      # halfway through, so refuse before anything is published.
+      - name: Verify the tag matches every package version
+        run: node scripts/sync-versions.mjs --check ${{ startsWith(github.ref, 'refs/tags/') && format('--tag {0}', github.ref_name) || '' }}
+
       - name: Lint
         run: yarn lint
 
       - name: Typecheck
         run: yarn typecheck
 
+      - name: Verify generated data matches its generator
+        run: yarn verify:data
+
       - name: Test with coverage
         run: yarn test --maxWorkers=2 --coverage
 
-      - name: Build library
-        run: yarn prepare
+      - name: Build packages
+        run: yarn build
 
-      - name: Pack tarball for release attachment
-        run: npm pack
+      - name: Check core bundle size budget
+        run: node scripts/check-size.mjs
 
-      - name: Generate sha256 checksum for the tarball
+      - name: Verify published tarball contents
+        run: node scripts/check-pack.mjs
+
+      # Order matters: the wrapper's `dependencies` reference the published
+      # core version, so the core must exist on the registry first.
+      - name: Publish password-intelligence
+        working-directory: packages/core
+        run: npm publish --provenance --access public --ignore-scripts
+
+      - name: Publish react-native-password-intelligence
+        working-directory: packages/react-native
+        run: npm publish --provenance --access public --ignore-scripts
+
+      - name: Pack tarballs and checksums for the release
         run: |
-          TARBALL=$(ls react-native-password-intelligence-*.tgz)
-          sha256sum "$TARBALL" > "${TARBALL}.sha256"
-          cat "${TARBALL}.sha256"
-
-      - name: Publish to npm
-        run: npm publish --provenance --access public
+          mkdir -p dist-release
+          for pkg in packages/core packages/react-native; do
+            tarball=$(cd "$pkg" && npm pack --ignore-scripts --silent)
+            mv "$pkg/$tarball" dist-release/
+          done
+          cd dist-release
+          for tarball in *.tgz; do
+            sha256sum "$tarball" > "${tarball}.sha256"
+            cat "${tarball}.sha256"
+          done
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
             CHANGELOG.md
-            react-native-password-intelligence-*.tgz
-            react-native-password-intelligence-*.tgz.sha256
+            dist-release/*.tgz
+            dist-release/*.tgz.sha256
