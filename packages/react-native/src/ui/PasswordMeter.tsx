@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 
 import { usePasswordRisk } from '../hooks/usePasswordRisk';
-import type { PasswordScore } from '../types';
+import type { PasswordScore } from 'password-intelligence';
 
 /**
  * Discriminated union: provide either `password` (auto-analyzed) OR `score`

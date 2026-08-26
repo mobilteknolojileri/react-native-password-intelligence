@@ -13,53 +13,16 @@
  * - common Turkish endearments, cultural keywords, and auth terms
  */
 
+import { buildTurkishDictionary } from '../core/turkishCase';
 import type { TurkishDictionary } from '../types';
 
-const COMPACT_PATTERN = /[\s'"‘’“”.\-–— ]+/g;
-
-const ASCII_TR_MAP: Record<string, string> = {
-  ç: 'c',
-  ğ: 'g',
-  ı: 'i',
-  ö: 'o',
-  ş: 's',
-  ü: 'u',
-};
-
-const normalize = (value: string): string =>
-  value.trim().toLocaleLowerCase('tr-TR');
-
-const toAsciiTr = (value: string): string =>
-  Array.from(value, (char) => ASCII_TR_MAP[char] ?? char).join('');
-
-const compact = (value: string): string => value.replace(COMPACT_PATTERN, '');
-
-const buildDictionary = (...groups: readonly string[][]): string[] => {
-  const output: string[] = [];
-  const seen = new Set<string>();
-
-  for (const group of groups) {
-    for (const rawValue of group) {
-      const base = normalize(rawValue);
-      if (!base) continue;
-
-      const candidates = [
-        base,
-        compact(base),
-        toAsciiTr(base),
-        compact(toAsciiTr(base)),
-      ];
-
-      for (const candidate of candidates) {
-        if (!candidate || seen.has(candidate)) continue;
-        seen.add(candidate);
-        output.push(candidate);
-      }
-    }
-  }
-
-  return output;
-};
+/**
+ * Every category goes through the same fold as custom words and per-call
+ * `userInputs` (see `core/turkishCase.ts`), so the four variants per entry -
+ * Turkish, compact, ASCII, compact ASCII - are generated in exactly one place.
+ */
+const buildDictionary = (...groups: readonly (readonly string[])[]): string[] =>
+  buildTurkishDictionary(groups.flat());
 
 const maleNames = [
   'Mehmet',

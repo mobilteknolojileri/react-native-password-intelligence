@@ -95,3 +95,7 @@ nitrogen/
 
 # npm pack artifacts
 *.tgz
+dist
+
+# playwright-mcp scratch output
+.playwright-mcp/

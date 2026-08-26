@@ -1,12 +1,9 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
+import { addCustomDictionary, configure } from 'password-intelligence';
+
 import { usePasswordRisk } from '../hooks/usePasswordRisk';
-import { clearCustomDictionary } from '../core/analyzer';
 
 describe('usePasswordRisk', () => {
-  beforeEach(() => {
-    clearCustomDictionary();
-  });
-
   it('returns score and feedback for a given password', () => {
     const { result } = renderHook(() => usePasswordRisk('password123'));
 
@@ -120,5 +117,30 @@ describe('usePasswordRisk', () => {
   it('returns score 0 for empty password', () => {
     const { result } = renderHook(() => usePasswordRisk(''));
     expect(result.current.score).toBe(0);
+  });
+
+  describe('engine configuration changes', () => {
+    it('re-analyses when a custom dictionary is registered after mount', () => {
+      // README pattern: the meter is already on screen when the app finishes
+      // loading its blocklist. Without a subscription the memoized result
+      // would stay on the pre-blocklist score until the user types again.
+      const { result } = renderHook(() => usePasswordRisk('acmecorp2024!'));
+      const before = result.current;
+
+      act(() => addCustomDictionary(['AcmeCorp']));
+
+      expect(result.current).not.toBe(before);
+      expect(result.current.score).toBeLessThan(before.score);
+      expect(result.current.feedback.warning).toMatch(/yasaklı/i);
+    });
+
+    it('re-analyses when configure() lands after mount', () => {
+      const { result } = renderHook(() => usePasswordRisk('zzzextra'));
+      const before = result.current.score;
+
+      act(() => configure({ dictionaries: { extra: ['zzzextra'] } }));
+
+      expect(result.current.score).toBeLessThan(before);
+    });
   });
 });

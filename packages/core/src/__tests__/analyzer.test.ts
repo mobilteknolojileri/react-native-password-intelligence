@@ -6,10 +6,6 @@ import {
 import type { PasswordScore } from '../types';
 
 describe('analyzePassword', () => {
-  beforeEach(() => {
-    clearCustomDictionary();
-  });
-
   // -----------------------------------------------------------------------
   // Edge cases
   // -----------------------------------------------------------------------

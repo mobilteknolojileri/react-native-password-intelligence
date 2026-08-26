@@ -1,0 +1,126 @@
+{
+  "name": "react-native-password-intelligence",
+  "version": "0.4.0",
+  "description": "Turkish-first password strength estimator for React Native — detects regional patterns (names, surnames, football, plates, brands) and ships an animated meter, headless hook, and pure analyzer.",
+  "source": "./src/index.ts",
+  "main": "./lib/commonjs/index.js",
+  "module": "./lib/module/index.js",
+  "react-native": "./lib/module/index.js",
+  "types": "./lib/typescript/commonjs/src/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "import": {
+        "types": "./lib/typescript/module/src/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/src/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*",
+    "!*.log"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "clean": "del-cli lib",
+    "build": "bob build",
+    "prepack": "yarn run -T turbo run build --filter=react-native-password-intelligence"
+  },
+  "keywords": [
+    "turkish",
+    "turkce",
+    "password-intelligence",
+    "password-strength",
+    "password",
+    "react-native",
+    "expo",
+    "security",
+    "strength",
+    "meter",
+    "zxcvbn",
+    "zxcvbn-ts",
+    "nist",
+    "nist-800-63b",
+    "blocklist",
+    "cultural-awareness",
+    "threat-intelligence",
+    "ios",
+    "android"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mobilteknolojileri/react-native-password-intelligence.git",
+    "directory": "packages/react-native"
+  },
+  "author": "mobilteknolojileri <mobilteknolojileri@gmail.com> (https://github.com/mobilteknolojileri)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mobilteknolojileri/react-native-password-intelligence/issues"
+  },
+  "homepage": "https://mobilteknolojileri.github.io/react-native-password-intelligence/",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "password-intelligence": "^0.4.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0"
+  },
+  "devDependencies": {
+    "del-cli": "^6.0.0",
+    "react-native-builder-bob": "^0.43.0",
+    "typescript": "^5.9.2"
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "commonjs",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "create-react-native-library": {
+    "type": "library",
+    "languages": "js",
+    "tools": [
+      "release-it",
+      "eslint",
+      "lefthook",
+      "jest"
+    ],
+    "version": "0.57.2"
+  }
+}
