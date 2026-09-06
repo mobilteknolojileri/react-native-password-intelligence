@@ -20,6 +20,19 @@ jobs:
       contents: write
       id-token: write
     steps:
+      # `workflow_dispatch` accepts any ref, and the version check below only
+      # binds to a tag when one is present. Without this guard a manual run
+      # from a branch would publish straight to npm with the OIDC token.
+      # Dispatching from a v* tag still works, which is what a retry needs.
+      - name: Refuse to publish from a non-tag ref
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "This workflow publishes to npm and must run from a v* tag."
+          echo "Got: $REF"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,7 +51,17 @@ jobs:
       # whose packages are still on the previous version would fail with E403
       # halfway through, so refuse before anything is published.
       - name: Verify the tag matches every package version
-        run: node scripts/sync-versions.mjs --check ${{ startsWith(github.ref, 'refs/tags/') && format('--tag {0}', github.ref_name) || '' }}
+        env:
+          # Never interpolate a ref into the shell. Refs may contain backticks,
+          # `$` and `;`, and this job holds `id-token: write` (npm OIDC) plus
+          # `contents: write` - a crafted tag would run as the publisher.
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            node scripts/sync-versions.mjs --check --tag "$RELEASE_TAG"
+          else
+            node scripts/sync-versions.mjs --check
+          fi
 
       - name: Lint
         run: yarn lint
@@ -63,13 +86,29 @@ jobs:
 
       # Order matters: the wrapper's `dependencies` reference the published
       # core version, so the core must exist on the registry first.
+      # Skip a version that is already on the registry so that re-running the
+      # workflow from the same tag can finish a partial release. Without this,
+      # a failure in the wrapper step left the tag unreleasable: the retry died
+      # on the core step with E403 before it ever reached the wrapper.
       - name: Publish password-intelligence
         working-directory: packages/core
-        run: npm publish --provenance --access public --ignore-scripts
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "password-intelligence@$VERSION" version > /dev/null 2>&1; then
+            echo "password-intelligence@$VERSION is already published; skipping."
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi
 
       - name: Publish react-native-password-intelligence
         working-directory: packages/react-native
-        run: npm publish --provenance --access public --ignore-scripts
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "react-native-password-intelligence@$VERSION" version > /dev/null 2>&1; then
+            echo "react-native-password-intelligence@$VERSION is already published; skipping."
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi
 
       - name: Pack tarballs and checksums for the release
         run: |
