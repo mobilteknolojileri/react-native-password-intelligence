@@ -2,11 +2,12 @@
 *                              @mobilteknolojileri
 
 # Critical paths — explicit ownership keeps reviewers honest even if defaults shift.
-/src/core/                     @mobilteknolojileri
-/src/dictionaries/             @mobilteknolojileri
-/src/translations/             @mobilteknolojileri
-/src/ui/                       @mobilteknolojileri
-/src/hooks/                    @mobilteknolojileri
+/packages/core/src/core/         @mobilteknolojileri
+/packages/core/src/dictionaries/ @mobilteknolojileri
+/packages/core/src/translations/ @mobilteknolojileri
+/packages/core/src/data/         @mobilteknolojileri
+/packages/react-native/src/ui/    @mobilteknolojileri
+/packages/react-native/src/hooks/ @mobilteknolojileri
 
 # Release-relevant configuration.
 /package.json                  @mobilteknolojileri
