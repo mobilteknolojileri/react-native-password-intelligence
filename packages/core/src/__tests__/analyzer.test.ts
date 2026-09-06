@@ -3,6 +3,7 @@ import {
   addCustomDictionary,
   clearCustomDictionary,
 } from '../core/analyzer';
+import { getConfigurationVersion } from '../core/engine';
 import type { PasswordScore } from '../types';
 
 describe('analyzePassword', () => {
@@ -253,6 +254,21 @@ describe('analyzePassword', () => {
       expect(result.score).toBeLessThanOrEqual(2);
     });
 
+    it('deduplicates custom entries that fold to the same dictionary word', () => {
+      // `Acme`, `ACME` and `acme ` build identical entries. Counting them
+      // separately burned three slots of the cap and bumped the configuration
+      // revision three times, re-rendering every mounted consumer each time.
+      clearCustomDictionary();
+      const before = getConfigurationVersion();
+
+      addCustomDictionary(['Acme']);
+      addCustomDictionary(['ACME']);
+      addCustomDictionary(['acme ']);
+
+      expect(getConfigurationVersion()).toBe(before + 1);
+      expect(analyzePassword('acme').score).toBe(0);
+    });
+
     it('addCustomDictionary is idempotent for repeated calls', () => {
       addCustomDictionary(['DuplicateBrandX']);
       addCustomDictionary(['DuplicateBrandX']);
@@ -354,6 +370,24 @@ describe('analyzePassword', () => {
     it('treats an object argument as empty string and does not throw', () => {
       expect(() => analyzePassword({} as any)).not.toThrow();
     });
+
+    it('drops null / undefined / NaN entries in userInputs instead of throwing', () => {
+      // zxcvbn calls `.toString()` on every entry. `usePasswordRisk` rewrites
+      // `undefined` and `NaN` to `null` through its JSON round-trip, so an
+      // unguarded entry throws during render on a half-loaded profile.
+      expect(() =>
+        analyzePassword('Ahmet1234', ['Ahmet', null as any])
+      ).not.toThrow();
+      expect(() =>
+        analyzePassword('Ahmet1234', ['Ahmet', undefined as any])
+      ).not.toThrow();
+      expect(() => analyzePassword('Ahmet1234', ['Ahmet', NaN])).not.toThrow();
+    });
+
+    it('still honours the valid userInputs entries alongside a dropped one', () => {
+      const result = analyzePassword('mehmet1907', ['Mehmet', null as any]);
+      expect(result.score).toBeLessThanOrEqual(2);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -401,6 +435,74 @@ describe('analyzePassword', () => {
 
     it('handles right-to-left override character (security-relevant)', () => {
       expect(() => analyzePassword('safe‮unsafe')).not.toThrow();
+    });
+
+    it('scores every NFD-normalised Turkish letter like its composed form', () => {
+      // Regression: only the dotted capital I was handled, so `S` + U+0327 and
+      // friends reached no matcher at all - `GÜMÜŞHANE` pasted from an iOS
+      // clipboard scored 4 where the composed spelling scored 0.
+      for (const word of ['ŞANLIURFA', 'GÜMÜŞHANE', 'ÖZTÜRK', 'ÇANKAYA']) {
+        expect(analyzePassword(word.normalize('NFD')).score).toBe(
+          analyzePassword(word).score
+        );
+      }
+    });
+
+    it('scores an NFD-normalised dotted capital I like the composed form', () => {
+      // Regression: the decomposed form scored 3 while the composed form
+      // scored 0, so a pasted `İstanbul` cleared a `score >= 3` signup gate.
+      const composed = analyzePassword('İstanbul');
+      const decomposed = analyzePassword('İstanbul'.normalize('NFD'));
+
+      expect(decomposed.score).toBe(composed.score);
+      expect(decomposed.score).toBeLessThanOrEqual(2);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Case-repair second pass
+  // -----------------------------------------------------------------------
+  describe('case-repair second pass', () => {
+    const turkishMatches = (password: string) =>
+      analyzePassword(password).sequence.filter((match) =>
+        String(
+          (match as { dictionaryName?: string }).dictionaryName ?? ''
+        ).startsWith('turkish')
+      );
+
+    it('keeps the pessimistic result when both passes land in the same band', () => {
+      // Both passes score 4, so comparing the five-bucket score returned the
+      // un-repaired pass with a crack time four orders of magnitude too high
+      // and without the Turkish city match in `sequence`.
+      const result = analyzePassword('İstanbul-2024-Xq7');
+
+      expect(turkishMatches('İstanbul-2024-Xq7').length).toBeGreaterThan(0);
+      expect(result.guesses).toBeLessThan(1e13);
+    });
+
+    it('reports match offsets that index the password it echoes back', () => {
+      // NFC composes an NFD `İ` back together, but leaves lowercase `i` +
+      // U+0307 alone - there is no precomposed form - so this is the shape
+      // that survives normalisation and still shortens under the repair.
+      const decomposed = 'i\u0307stanbul1907';
+      const result = analyzePassword(decomposed);
+
+      expect(result.password).toHaveLength(decomposed.length);
+      for (const match of result.sequence) {
+        expect(result.password.slice(match.i, match.j + 1)).toBe(match.token);
+      }
+    });
+
+    it('keeps a trailing combining mark inside the match that owns it', () => {
+      // When the dropped U+0307 follows the LAST matched character, ending the
+      // span at the mapped index leaves the mark dangling outside every match.
+      for (const input of ['i\u0307', 'ai\u0307', 'i\u0307stanbuli\u0307']) {
+        const result = analyzePassword(input);
+        const covered =
+          Math.max(...result.sequence.map((match) => match.j)) + 1;
+
+        expect(covered).toBe(input.length);
+      }
     });
   });
 

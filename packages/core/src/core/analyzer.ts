@@ -17,7 +17,12 @@ import {
   setCustomWords,
   MAX_CUSTOM_DICTIONARY_SIZE,
 } from './engine';
-import { expandTurkishVariants, repairTurkishCase } from './turkishCase';
+import {
+  expandTurkishVariants,
+  mapRepairedIndices,
+  repairTurkishCase,
+  toNfc,
+} from './turkishCase';
 
 const hasOwn = (object: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(object, key);
@@ -64,11 +69,44 @@ const foldUserInputs = (
   for (const input of userInputs) {
     if (typeof input === 'string') {
       folded.push(...expandTurkishVariants(input));
-    } else {
+    } else if (typeof input === 'number' && Number.isFinite(input)) {
       folded.push(input);
     }
+    // Anything else is dropped rather than forwarded. zxcvbn calls `.toString()`
+    // on every entry, so a `null` throws - and `usePasswordRisk` manufactures
+    // exactly that out of `undefined`/`NaN` through its JSON round-trip, which
+    // would take down the render tree on a keystroke.
   }
   return folded;
+};
+
+/**
+ * Re-anchors matches found in the repaired string onto the original password.
+ * The repair collapses `i`/`I` + U+0307 into one character, so without this
+ * `password.slice(match.i, match.j + 1)` returns a shifted substring and any
+ * consumer highlighting matched spans underlines the wrong characters.
+ */
+const realignSequence = (
+  sequence: ZxcvbnResult['sequence'],
+  original: string
+): ZxcvbnResult['sequence'] => {
+  const indices = mapRepairedIndices(original);
+  if (indices === null) return sequence;
+
+  return sequence.map((match) => {
+    const start = indices[match.i];
+    if (start === undefined) return match;
+    // End the span just before the next repaired character begins, so that a
+    // combining mark dropped after the final matched character stays inside
+    // the match instead of dangling past it.
+    const end = (indices[match.j + 1] ?? original.length) - 1;
+    return {
+      ...match,
+      i: start,
+      j: end,
+      token: original.slice(start, end + 1),
+    };
+  });
 };
 
 export const analyzePassword = (
@@ -77,7 +115,11 @@ export const analyzePassword = (
 ): ZxcvbnResult => {
   applyPendingOptions();
 
-  const safe = typeof password === 'string' ? password : '';
+  // Compose before anything else looks at the string: NFD input reaches every
+  // Turkish letter, not just the dotted capital I, and an unnormalised
+  // `GUMUSHANE` scored 4 where the composed spelling scored 0. `result.password`
+  // therefore echoes the NFC form of the input, which renders identically.
+  const safe = toNfc(typeof password === 'string' ? password : '');
 
   // zxcvbn-ts is roughly O(n2) over input length; truncate to avoid blocking
   // the UI thread on pathological pastes (e.g., a leaked 50KB token).
@@ -101,11 +143,20 @@ export const analyzePassword = (
   if (repaired === truncated) return withDictionaryWarning(primary);
 
   const alternate = zxcvbn(repaired, inputs);
-  return withDictionaryWarning(
-    alternate.score < primary.score
-      ? { ...alternate, password: truncated }
-      : primary
-  );
+
+  // Compare guesses, not the five-bucket score. The buckets tie constantly -
+  // both passes land on 4 for `Istanbul-2024-Xq7` - and on a tie the
+  // un-repaired pass wins with a crack time three to five orders of magnitude
+  // too optimistic, and without the Turkish match in `sequence`.
+  if (alternate.guesses >= primary.guesses) {
+    return withDictionaryWarning(primary);
+  }
+
+  return withDictionaryWarning({
+    ...alternate,
+    password: truncated,
+    sequence: realignSequence(alternate.sequence, truncated),
+  });
 };
 
 /**
@@ -122,14 +173,27 @@ export const analyzePassword = (
 export const addCustomDictionary = (customWords: readonly string[]): void => {
   if (customWords.length === 0) return;
 
-  const merged = new Set<string>(getCustomWords());
-  for (const word of customWords) {
-    if (typeof word === 'string' && word.trim().length > 0) {
-      merged.add(word);
+  // Dedupe on the folded form, not the raw string: `Acme`, `ACME` and `acme `
+  // build the same dictionary entries, so counting them separately burns three
+  // slots of the cap and bumps the configuration revision three times - and
+  // every bump re-ranks the dictionary and re-renders each mounted consumer.
+  const byFoldedForm = new Map<string, string>();
+  for (const word of getCustomWords()) {
+    const key = expandTurkishVariants(word)[0];
+    if (key !== undefined && !byFoldedForm.has(key)) {
+      byFoldedForm.set(key, word);
     }
   }
 
-  if (merged.size > MAX_CUSTOM_DICTIONARY_SIZE) {
+  const sizeBefore = byFoldedForm.size;
+  for (const word of customWords) {
+    if (typeof word !== 'string') continue;
+    const key = expandTurkishVariants(word)[0];
+    if (key === undefined || byFoldedForm.has(key)) continue;
+    byFoldedForm.set(key, word.trim());
+  }
+
+  if (byFoldedForm.size > MAX_CUSTOM_DICTIONARY_SIZE) {
     if (typeof console !== 'undefined') {
       console.warn(
         `[password-intelligence] Custom dictionary exceeds ${MAX_CUSTOM_DICTIONARY_SIZE} entries; additions ignored`
@@ -138,8 +202,8 @@ export const addCustomDictionary = (customWords: readonly string[]): void => {
     return;
   }
 
-  if (merged.size === getCustomWords().length) return;
-  setCustomWords([...merged]);
+  if (byFoldedForm.size === sizeBefore) return;
+  setCustomWords([...byFoldedForm.values()]);
 };
 
 /**
