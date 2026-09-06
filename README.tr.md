@@ -189,7 +189,7 @@ Kayıtlar her tuş vuruşunda yeniden işlenmez; gerçek bir zxcvbn sözlüğü 
 
 ### `analyzePassword(password, userInputs?)`
 
-Saf fonksiyon. Senkrondur.
+Saf fonksiyon. zxcvbn'i ilk çağrıda kurar (~38 ms), sonraki çağrılarda senkrondur.
 
 ```ts
 analyzePassword(
@@ -200,7 +200,7 @@ analyzePassword(
 
 | Alan | Tip | Notlar |
 |---|---|---|
-| `password` | `string` | String olmayan değerler `''`e dönüştürülür. 1.024 karakterden uzun girdiler kırpılır. |
+| `password` | `string` | String olmayan değerler `''`e dönüştürülür. Girdi NFC'ye normalize edilir ve 256 karakterden sonrası kırpılır. |
 | `userInputs` | `readonly (string \| number)[]` | İsteğe bağlı. Kullanıcıya özgü değerler; Türkçe, birleşik ve ASCII biçimleriyle eşleştirilir. |
 
 `score`, `feedback`, `crackTimesDisplay`, `crackTimesSeconds`, `guesses`, `sequence` alanlarını
@@ -253,11 +253,11 @@ configure({ dictionaries: dictionary, graphs: adjacencyGraphs });
 | Seçenek | Amaç |
 |---|---|
 | `dictionaries` | Ek zxcvbn sözlükleri; gömülü olanların üzerine anahtar bazında birleşir |
-| `graphs` | Gömülü klavye komşuluk grafiklerini değiştirir |
+| `graphs` | Ek klavye komşuluk grafikleri; gömülü olanların üzerine düzen düzen birleştirilir |
 | `translations` | Gömülü Türkçe geri bildirim metinlerini değiştirir; Türkçe kategori uyarılarını da çevirmek için `dictionaryWarnings` haritası ekleyin (eklenmezse bu eşleşmeler dil karıştırmak yerine `warning: null` döner) |
 | `disableTurkishDictionaries` | Yalnızca İngilizce listeyi kullan |
 | `disableBundledPasswords` | Yalnızca Türkçe kategorileri kullan |
-| `maxLength` | Kırpmadan önce analiz edilen karakter sayısı (varsayılan 1024) |
+| `maxLength` | Kırpmadan önce analiz edilen karakter sayısı (varsayılan 256, `@zxcvbn-ts/core` ile aynı) |
 | `useLevenshteinDistance`, `levenshteinThreshold` | zxcvbn'e aktarılır |
 
 `configure()` seçenekleri senkron doğrular; geçersiz bir seçenekte (`maxLength` pozitif tam sayı
@@ -309,24 +309,38 @@ sayısına** dayanır.
 
 ## Standartlar
 
-NIST SP 800-63B [§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html), doğrulayıcıların
-parolayı *"bilinen yaygın, beklenen veya ele geçirilmiş parolaları içeren bir engelleme
-listesiyle"* karşılaştırmasını — bu listeye açıkça **sözlük kelimeleri** ve **hizmet adı,
-kullanıcı adı ve bunların türevleri gibi bağlama özgü kelimeler** dâhil olmak üzere — ve
-*"aboneye güçlü bir parola seçmesinde rehberlik sunmasını"* **zorunlu kılar**.
+NIST SP 800-63B-4 §3.1.1.2 *Password Verifiers*
+([HTML](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver) ·
+[DOI](https://doi.org/10.6028/NIST.SP.800-63b-4)), doğrulayıcıların parolayı *"bilinen yaygın,
+beklenen veya ele geçirilmiş parolaları içeren bir engelleme listesiyle"* karşılaştırmasını zorunlu
+kılar. **Sözlük kelimeleri** ile **hizmet adı, kullanıcı adı ve bunların türevleri gibi bağlama
+özgü kelimeler** o listede *örnek* olarak geçer — standardın ifadesi *"For example, the list may
+include…"*, yani zorunlu bir küme değil. Doğrulayıcılar ayrıca *"aboneye güçlü bir parola seçmesinde
+rehberlik sunmakla"* yükümlüdür.
 
-| §3.1.1.2 ne istiyor | Bu kütüphane ne sağlıyor |
+O maddedeki bir cümle, bu tür bir kütüphane için geri kalanının hepsinden önemli:
+
+> *"Karşılaştırmaya parolanın tamamı tabi tutulmalıdır; içinde geçebilecek alt diziler veya
+> kelimeler değil."*
+
+zxcvbn, tasarımı gereği bir alt dizi ve örüntü eşleştiricisidir — §3.1.1.2'nin tarif ettiği
+"parolanın tamamının listede olup olmadığı" testinin tam tersi. Bu yüzden ne aldığınız konusunda
+net olalım:
+
+| §3.1.1.2 ne istiyor | Bu kütüphane |
 |---|---|
-| Sözlük kelimelerinden oluşan engelleme listesi | Türkçe bölgesel derlem + gömülü yaygın parola listesi |
-| Bağlama özgü kelimeler (kullanıcı adı, hizmet adı, türevleri) | Çağrı başına `userInputs`, global `addCustomDictionary` |
+| Parolanın tamamının engelleme listesiyle karşılaştırılması | **Bunu yapmaz.** Hiçbir istemci tarafı puanlayıcı yapamaz. Sunucuda yapın; buradaki derlemler ona makul bir girdidir. |
+| Bağlama özgü kelimeler (kullanıcı adı, hizmet adı, türevleri) | Çağrı başına `userInputs`, global `addCustomDictionary` — engelleme listesi olarak değil, puanlama sinyali olarak |
 | Aboneye rehberlik | Türkçe `feedback.warning` ve `feedback.suggestions` |
 
 **Bu, sizi uyumlu hâle getirmez.** 800-63B bu kontrolü *doğrulayıcıya* (sunucuya) yükler; bu
 kütüphane istemci tarafında çalışır ve yalnızca puan döner, hiçbir şeyi reddetmez. Zorlama sunucu
 tarafında yapılmalıdır.
 
-Aynı madde şunu da söyler: *"parolalar için başka kompozisyon gereksinimleri dayatılmamalıdır"* —
-yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
+§3.1.1.2'nin 5. maddesi şunu da söyler: *"Doğrulayıcılar ve CSP'ler parolalar için başka
+kompozisyon kuralları (örneğin farklı karakter türlerinin karışımını zorunlu kılmak)
+dayatmamalıdır"* (§3.1.1.1 aynı şeyi *"parolalar için başka kompozisyon gereksinimleri
+dayatılmamalıdır"* diye ifade eder) — yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
 
 ---
 
@@ -335,8 +349,9 @@ yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
 - **Parola yöneticisi değildir** — parola saklamaz, iletmez, senkronize etmez.
 - **Hash fonksiyonu değildir** — hash üretmez ve doğrulamaz. Saklama için
   [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
-  sıralamasına uyun: **Argon2id** ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html)),
-  scrypt veya PBKDF2; bcrypt yalnızca eski sistemler için.
+  sıralamasına uyun: **Argon2id** ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html) — bu
+  belge standards-track değil, IRTF/CFRG Informational'dır) veya scrypt; FIPS-140 doğrulaması
+  gerekiyorsa PBKDF2; bcrypt yalnızca eski sistemler için.
 - **Parola üreticisi değildir** — CSPRNG tabanlı bir üretici kullanın.
 - **Sunucu tarafı doğrulayıcı değildir** — puan bir UX ipucudur, yetkilendirme kapısı değil.
 
@@ -344,26 +359,45 @@ yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
 
 ## Karşılaştırma
 
-| Özellik | `react-native-password-intelligence` | `zxcvbn-ts` (düz) | `react-native-password-strength-meter` |
-|---|:---:|:---:|:---:|
-| Tahmin sayısına dayalı puanlama | ✅ | ✅ | ⚠️ gelişigüzel |
-| Türkçe kültürel zekâ katmanı | ✅ | ❌ | ❌ |
-| Türkçe `İ` durum onarımı | ✅ | ❌ | ❌ |
-| React Native arayüz bileşeni | ✅ | ❌ | ✅ |
-| Başsız React hook'u | ✅ | ❌ | ❌ |
-| Çağrı başına kullanıcı girdileri | ✅ | ✅ | ❌ |
-| Global özel sözlük API'si | ✅ | ⚠️ `setOptions` ile | ❌ |
-| Türkçe geri bildirim metinleri | ✅ | ❌ | ❌ |
-| Uzun girdi DoS koruması | ✅ | ❌ | ❌ |
-| Framework'süz çekirdek paket | ✅ | ✅ | ❌ |
-| Katı TypeScript + provenance'lı yayın | ✅ | ✅ | ❌ |
+| | bu kütüphane | `@zxcvbn-ts/core` + [`language-tr`](https://www.npmjs.com/package/@zxcvbn-ts/language-tr) | `zxcvbn` (Dropbox) | `react-native-password-strength-meter` |
+|---|:---:|:---:|:---:|:---:|
+| Tahmin sayısına dayalı puanlama | ✅ | ✅ | ✅ | ❌ karakter sınıfı sezgiseli |
+| Türkçe isimler, şehirler, büyük kulüpler | ✅ | ✅ | ❌ | ❌ |
+| ASCII'ye indirgenmiş varyantlar (`fenerbahce`, `ataturk`, `yilmaz`) | ✅ | ❌ | ❌ | ❌ |
+| Plaka kodları, kulüp lakapları (`cimbom`), marka derlemi | ✅ | ❌ | ❌ | ❌ |
+| Türkçe yerel ayarlı durum onarımı (`İ` / `I`) | ✅ | ❌ | ❌ | ❌ |
+| Türkçe geri bildirim metinleri | ✅ | ✅ | ❌ | ❌ |
+| React Native arayüz bileşeni | ✅ | ❌ | ❌ | ✅ |
+| Başsız React hook'u | ✅ | ❌ | ❌ | ❌ |
+| Çağrı başına kullanıcı girdileri | ✅ | ✅ | ✅ | ❌ |
+| Global özel sözlük API'si | ✅ | ⚠️ constructor seçenekleriyle | ❌ | ❌ |
+| Framework'süz çekirdek paket | ✅ | ✅ | ✅ | ❌ |
+| npm provenance ile yayın | ✅ | ❌ | ❌ | ❌ |
+| Türkçe + yaygın parola paketi | **~37 kB gzip** | ~400 kB gzip | ~400 kB gzip | yok |
+| Son sürüm | — | 2026-08 | **2017-02** | **2020-11** |
+
+İki satır, onay işareti yerine dipnot hak ediyor.
+
+**`@zxcvbn-ts/language-tr`'yi biz yazdık** ([PR #315](https://github.com/zxcvbn-ts/zxcvbn/pull/315)),
+yani yukarıdaki Türkçe satırlar bir rakibin arayı kapatması değil, aynı yazarın upstream işi. O
+paket zxcvbn'e 30.000 Türkçe frekans kelimesi, 10.000 Wikipedia başlığı, 1.794 ad, 198 soyad ve
+Türkçe geri bildirim metinleri kazandırıyor. Bilinçli olarak yapmadığı şey ise `fenerbahçe`'yi
+`fenerbahce`'ye katlamak, `cimbom`'un Galatasaray, `34`'ün İstanbul demek olduğunu bilmek veya bir
+marka derlemi taşımak. Bu kütüphane onun üzerindeki katman — ve tam yaygın parola listesi yerine
+4.000 kayıtlık bir dilim gömdüğü için ~400 kB değil ~37 kB tutuyor.
+
+**"Uzun girdi DoS koruması" diye bir satır yok**, çünkü o iddianın dürüst hâli bir özellik
+karşılaştırması olamayacak kadar dar: `@zxcvbn-ts/core`'da v2.2.1'den beri `maxLength` seçeneği var
+(varsayılanı **256**, yani bizimkinden sıkı). Bu kütüphanenin ne yaptığı ve nedeni için
+[Mühendislik detayları](#mühendislik-detayları) altındaki *Uzun girdi güvenliği* maddesine bakın.
 
 ---
 
 ## Mühendislik detayları
 
-- **~34 kB gzip, 236 kB değil** — tam 49.233 kayıtlık `@zxcvbn-ts/language-common` (229 kB gzip)
-  yerine frekans sıralı ilk 4.000 parola gömülür. `configure()` istediğinizde tam kapsamı geri
+- **~37 kB gzip, 236 kB değil** — tam 49.233 kayıtlık `@zxcvbn-ts/language-common` (229 kB gzip)
+  yerine frekans sıralı ilk 4.000 parola gömülür. (`scripts/check-size.mjs` ile ESM çıktısı
+  üzerinden ölçülür; `@zxcvbn-ts/core` her hâlükârda ~20 kB ekler.) `configure()` istediğinizde tam kapsamı geri
   yükler. Not: bu bağımlılık eskiden kök giriş zincirinde statik bir import'tu, dolayısıyla
   `sideEffects: false` onu kaldıramıyordu — *çağrıyı* ertelemek *import*'u ertelemez, ve Metro
   zaten tree-shaking yapmaz.
@@ -371,13 +405,16 @@ yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
   entropisi ve zxcvbn'in `capitalization` önerisi korunur. Unicode varsayılan küçültmesi iki yerde
   eşleşmeyi bozar: noktalı `İ` (`i` + U+0307 olur) ve başka bir Türkçe harfin yanındaki ASCII `I`
   (`ŞANLIURFA` → `şanliurfa`). Yalnızca böyle girdiler ASCII'ye indirgenmiş ikinci bir geçişten
-  geçer; düşük puan kazanır ve `result.password` her zaman girdinin kendisidir.
-- **Uzun girdi güvenliği** — 1.024 karakterden uzun parolalar zxcvbn'e ulaşmadan kırpılır ve
-  O(n²) eşleştiricinin en kötü durum maliyeti sınırlanır.
+  geçer; düşük puan kazanır ve `result.password` girdinin NFC'ye normalize edilmiş hâlini yansıtır.
+- **Uzun girdi güvenliği** — 256 karakterden uzun parolalar zxcvbn'e ulaşmadan kırpılır. Bu
+  gereksiz bir tekrar değil, yük taşıyan bir koruma: `@zxcvbn-ts/core` v3'ün kendi `maxLength`'i
+  var ama onu yalnızca `zxcvbnAsync` içinde uyguluyor, dolayısıyla bu kütüphanenin çağırdığı
+  senkron `zxcvbn()` ham diziyi alıyor. Sınır en kötü durumu bağlar, uzun girdiyi ucuzlatmaz —
+  uzunluğun gerçek maliyeti için [Performans notları](#performans-notları)na bakın.
 - **Varsayılan Türkçe geri bildirim** — uyarı ve öneri metinleri Türkçe döner. Türkçe sözlük
   eşleşmeleri kategori bazlı açıklama üretir: futbol takımı, şehir, marka, burç, sevgi sözcüğü…
   zxcvbn'in kendi kuralıyla: puanı 3 veya 4 olan bir parola için asla uyarı üretilmez.
-- **Endüstriyel test seti** — 210+ test, %85 satır / %80 fonksiyon / %75 dal eşiğiyle korunuyor.
+- **Endüstriyel test seti** — 230+ test, %85 satır / %80 fonksiyon / %75 dal eşiğiyle korunuyor.
   30 girdilik puan regresyon anlık görüntüsü, sözlük veya puanlama güncellemelerinde kazara
   kaymaya karşı bekçilik eder. CI ayrıca gzip bütçesini ve yayınlanan tarball içeriğini denetler.
 - **Katı TypeScript** — `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`,
@@ -390,10 +427,27 @@ yani bu puanın üzerine karakter sınıfı kuralları eklemeyin.
 
 ### Performans notları
 
-- İlk `analyzePassword` çağrısı: ~30–80 ms (zxcvbn seçenek kaydı + sözlük oluşturma).
-- Sonraki çağrılar: tipik olarak ~1–10 ms.
+zxcvbn'in eşleştirme maliyeti girdi uzunluğuyla dik biçimde artar ve diğer her şeyi gölgede bırakır.
+Her uzunluk için 10 farklı rastgele girdinin medyanı, ısınmış, masaüstünde Node 22, varsayılan
+`maxLength` 256 ile:
+
+| Uzunluk | 8 | 16 | 32 | 64 | 128 | 256 ve üzeri |
+|---|---|---|---|---|---|---|
+| Medyan | 0,4 ms | 2,7 ms | 82 ms | 190 ms | 409 ms | ~890 ms |
+
+Son sütun düz, çünkü `maxLength` sonrası kırpılıyor — 4.096 karakterlik bir yapıştırma 256
+karakterlik biriyle aynı maliyette. Sınırı yükseltmek bu tavanı kaldırır: aynı ölçüm
+`maxLength: 1024` ile çağrı başına **6,6 sn** çıkmıştı, varsayılanın orada durmamasının sebebi bu.
+
+- **Bunu hesaba katın.** Parola yöneticisinden gelen 64 karakterlik bir parola masaüstünde çağrı
+  başına ~190 ms, orta seviye bir Android'de birkaç katı tutar. `usePasswordRisk` senkrondur ve
+  debounce **yapmaz**, dolayısıyla bu maliyet her tuş vuruşunda ödenir. Formunuz uzun parola kabul
+  ediyorsa değeri iletmeden önce debounce edin; opsiyonel bir `debounceMs` 1.0.0 yol haritasında.
+- Temiz bir süreçte ilk `analyzePassword` çağrısı: ~38 ms (zxcvbn seçenek kaydı + sözlük oluşturma).
 - `configure()` sonrası seçeneklerin yeniden uygulanması: gömülü sözlükler için ~1 ms, tam
-  `language-common` seti için ~8 ms.
+  `language-common` seti için ~15 ms.
+- Türkçe durum onarımının ikinci geçişi, onu tetikleyen girdilerin maliyetini kabaca ikiye katlar;
+  bu girdiler nadirdir — saf ASCII girdi hiçbir zaman tetiklemez.
 - Sözlük ayak izi: 12 Türkçe kategori (~5 kB gzip) + 4.000 yaygın parola (~17 kB gzip) +
   6 klavye düzeni (~3 kB gzip).
 - Hook, `(password, userInputs)` ikilisinin JSON'a çevrilmiş değerine göre memoize eder.
