@@ -41,6 +41,16 @@ updates:
     directories:
       - "/packages/core"
       - "/packages/react-native"
+    # zxcvbn-ts v4 is an API rewrite, not a version bump: the options singleton
+    # is replaced by a factory, the crack-time result is restructured, and the
+    # dictionary keys are namespaced (`passwords` -> `passwords-common`), which
+    # breaks the engine's dictionary branching silently rather than loudly.
+    # Tracked as a 1.0.0 item in ROADMAP.md; drop this once it lands.
+    ignore:
+      - dependency-name: "@zxcvbn-ts/core"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@zxcvbn-ts/language-common"
+        update-types: ["version-update:semver-major"]
     schedule:
       interval: monthly
       day: monday
