@@ -12,6 +12,7 @@ import {
   buildTurkishDictionary,
   expandTurkishVariants,
   lowerTurkish,
+  mapRepairedIndices,
   repairTurkishCase,
   toAsciiTurkish,
 } from '../core/turkishCase';
@@ -26,6 +27,13 @@ describe('Turkish case handling', () => {
     it('matches toLocaleLowerCase("tr-TR") for the letters that differ', () => {
       expect(lowerTurkish('IŞIK İstanbul')).toBe('ışık istanbul');
       expect(lowerTurkish('i̇stanbul')).toBe('istanbul');
+    });
+
+    it('folds the decomposed (NFD) dotted capital I', () => {
+      // macOS and iOS put `I` + U+0307 on the clipboard instead of U+0130. The
+      // bare `I` must not be read as an ASCII capital and lowered to `ı`.
+      expect(lowerTurkish('İstanbul'.normalize('NFD'))).toBe('istanbul');
+      expect(lowerTurkish('İSTANBUL'.normalize('NFD'))).toBe('istanbul');
     });
   });
 
@@ -73,11 +81,38 @@ describe('Turkish case handling', () => {
       expect(repairTurkishCase('Işık2024!')).toBe('Isik2024!');
     });
 
+    it('collapses a decomposed (NFD) dotted capital I', () => {
+      // Regression: 0.3.0 handled this through toLocaleLowerCase('tr-TR'). The
+      // 0.4.0 rewrite only matched U+0130 and lowercase `i` + U+0307, so an
+      // NFD paste of `İstanbul` scored 3 instead of 0.
+      expect(repairTurkishCase('İstanbul'.normalize('NFD'))).toBe('Istanbul');
+      expect(repairTurkishCase('İSTANBUL'.normalize('NFD'))).toBe('ISTANBUL');
+    });
+
     it('is a no-op for pure ASCII and for Turkish input without a capital I', () => {
       expect(repairTurkishCase('Xk9#mP2$vL7@nQ5!')).toBe('Xk9#mP2$vL7@nQ5!');
       expect(repairTurkishCase('IBRAHIM')).toBe('IBRAHIM');
       expect(repairTurkishCase('Şanlıurfa')).toBe('Şanlıurfa');
       expect(repairTurkishCase('çağla')).toBe('çağla');
+    });
+  });
+
+  describe('mapRepairedIndices', () => {
+    it('returns null when the repair preserves length', () => {
+      expect(mapRepairedIndices('İSTANBUL')).toBeNull();
+      expect(mapRepairedIndices('ŞANLIURFA')).toBeNull();
+      expect(mapRepairedIndices('plain')).toBeNull();
+    });
+
+    it('maps every repaired index back past the dropped combining dot', () => {
+      const decomposed = 'İstanbul'.normalize('NFD');
+      const indices = mapRepairedIndices(decomposed);
+
+      expect(indices).not.toBeNull();
+      expect(indices).toHaveLength(repairTurkishCase(decomposed).length);
+      // `I` keeps index 0; U+0307 is dropped, so everything after shifts by one.
+      expect(indices?.[0]).toBe(0);
+      expect(indices?.[1]).toBe(2);
     });
   });
 
