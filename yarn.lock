@@ -11085,7 +11085,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"password-intelligence@npm:^0.4.0, password-intelligence@workspace:*, password-intelligence@workspace:packages/core":
+"password-intelligence@npm:^0.4.1, password-intelligence@workspace:*, password-intelligence@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "password-intelligence@workspace:packages/core"
   dependencies:
@@ -11569,7 +11569,7 @@ __metadata:
   resolution: "react-native-password-intelligence@workspace:packages/react-native"
   dependencies:
     del-cli: "npm:^6.0.0"
-    password-intelligence: "npm:^0.4.0"
+    password-intelligence: "npm:^0.4.1"
     react-native-builder-bob: "npm:^0.43.0"
     typescript: "npm:^5.9.2"
   peerDependencies:
