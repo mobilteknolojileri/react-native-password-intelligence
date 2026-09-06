@@ -99,7 +99,7 @@
   },
   "devDependencies": {
     "@zxcvbn-ts/language-common": "^3.0.4",
-    "del-cli": "^6.0.0",
+    "del-cli": "^7.0.0",
     "react-native-builder-bob": "^0.43.0",
     "typescript": "^5.9.2"
   },

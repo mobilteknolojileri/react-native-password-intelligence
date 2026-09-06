@@ -6446,20 +6446,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"del-cli@npm:^6.0.0":
-  version: 6.0.0
-  resolution: "del-cli@npm:6.0.0"
+"del-cli@npm:^7.0.0":
+  version: 7.0.0
+  resolution: "del-cli@npm:7.0.0"
   dependencies:
-    del: "npm:^8.0.0"
-    meow: "npm:^13.2.0"
+    del: "npm:^8.0.1"
+    meow: "npm:^14.0.0"
+    presentable-error: "npm:^0.0.1"
   bin:
     del: cli.js
     del-cli: cli.js
-  checksum: 10c0/920a57efd804afab7799b8304de97d3ebbaf98dc0a524a4938115a494d67bf116674e3b38375c9cd091cf7caa8b4c2a32cbda3a032f66e0554d30d03ed5eddbe
+  checksum: 10c0/5430d233e55bfb52f3e27647e177535d0d2dac0354aeef99ff8769892203d949dc18e0bb945ef2b17d6941a8d27432b87192f50545ef4847f1b430c6b45b9305
   languageName: node
   linkType: hard
 
-"del@npm:^8.0.0, del@npm:^8.0.1":
+"del@npm:^8.0.1":
   version: 8.0.1
   resolution: "del@npm:8.0.1"
   dependencies:
@@ -10018,10 +10019,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"meow@npm:^13.0.0, meow@npm:^13.2.0":
+"meow@npm:^13.0.0":
   version: 13.2.0
   resolution: "meow@npm:13.2.0"
   checksum: 10c0/d5b339ae314715bcd0b619dd2f8a266891928e21526b4800d49b4fba1cc3fff7e2c1ff5edd3344149fac841bc2306157f858e8c4d5eaee4d52ce52ad925664ce
+  languageName: node
+  linkType: hard
+
+"meow@npm:^14.0.0":
+  version: 14.1.0
+  resolution: "meow@npm:14.1.0"
+  checksum: 10c0/f0ca4bb4fd08e4b9470fcbb7332deb61d72d40d4bda18ffb87c1a98e5014c0b44749ae9f0cab18fa532e26d61cef5d453831f9ae23ac09fa8ea0e0469be73ebc
   languageName: node
   linkType: hard
 
@@ -11068,7 +11076,7 @@ __metadata:
     "@types/jest": "npm:^29.5.14"
     "@types/react": "npm:^19.1.12"
     commitlint: "npm:^19.8.1"
-    del-cli: "npm:^6.0.0"
+    del-cli: "npm:^7.0.0"
     eslint: "npm:^9.35.0"
     eslint-config-prettier: "npm:^10.1.8"
     eslint-plugin-prettier: "npm:^5.5.4"
@@ -11091,7 +11099,7 @@ __metadata:
   dependencies:
     "@zxcvbn-ts/core": "npm:^3.0.4"
     "@zxcvbn-ts/language-common": "npm:^3.0.4"
-    del-cli: "npm:^6.0.0"
+    del-cli: "npm:^7.0.0"
     react-native-builder-bob: "npm:^0.43.0"
     typescript: "npm:^5.9.2"
   languageName: unknown
@@ -11568,7 +11576,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "react-native-password-intelligence@workspace:packages/react-native"
   dependencies:
-    del-cli: "npm:^6.0.0"
+    del-cli: "npm:^7.0.0"
     password-intelligence: "npm:^0.4.1"
     react-native-builder-bob: "npm:^0.43.0"
     typescript: "npm:^5.9.2"
