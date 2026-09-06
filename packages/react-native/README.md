@@ -292,31 +292,42 @@ The scale is zxcvbn-ts's 0–4 band, derived from estimated guess counts rather 
 
 ## Standards
 
-NIST SP 800-63B [§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html) requires verifiers to
-compare a prospective password against *"a blocklist that contains known commonly used, expected, or
-compromised passwords"* — explicitly including **dictionary words** and **context-specific words,
-such as the name of the service, the username, and derivatives thereof** — and to *"offer guidance
-to the subscriber to help the subscriber choose a strong password."*
+NIST SP 800-63B-4 §3.1.1.2 *Password Verifiers*
+([HTML](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver) ·
+[DOI](https://doi.org/10.6028/NIST.SP.800-63b-4)) requires that *"verifiers SHALL compare the
+prospective secret against a blocklist that contains known commonly used, expected, or compromised
+passwords."* **Dictionary words** and **context-specific words, such as the name of the service,
+the username, and derivatives thereof** appear there as example entries — the standard's wording is
+*"For example, the list may include…"*, not a mandated set. Verifiers must also *"offer guidance to
+the subscriber to help the subscriber choose a strong password."*
 
-This library helps you implement that requirement:
+One sentence in that section matters more than the rest for a library like this one:
 
-| 800-63B §3.1.1.2 asks for | This library provides |
+> *"The entire password SHALL be subject to comparison, not substrings or words that might be
+> contained therein."*
+
+zxcvbn is a substring and pattern matcher by construction, which is the opposite of the
+whole-password membership test §3.1.1.2 prescribes. So be precise about what you get:
+
+| 800-63B-4 §3.1.1.2 asks for | This library |
 |---|---|
-| Blocklist of dictionary words | Turkish regional corpus + bundled common-password list |
-| Context-specific words (username, service name, derivatives) | `userInputs` per call, `addCustomDictionary` globally |
+| Whole-password comparison against a blocklist | **Does not do this.** No client-side scorer can. Run it verifier-side; the corpora here are a reasonable input to one. |
+| Context-specific words (username, service name, derivatives) | `userInputs` per call, `addCustomDictionary` globally — as scoring signals, not as a blocklist |
 | Guidance to the subscriber | Turkish `feedback.warning` and `feedback.suggestions` |
 
 **It does not make you compliant.** 800-63B places the check on the *verifier*; this runs
 client-side and returns a score, it does not reject anything. Enforcement must happen server-side.
-Note also that the same section states *"other composition requirements for passwords SHALL NOT be
-imposed"* — so do not layer character-class rules on top of this score.
+Note also that §3.1.1.2 item 5 states *"Verifiers and CSPs SHALL NOT impose other composition rules
+(e.g., requiring mixtures of different character types) for passwords"* (§3.1.1.1 puts it as
+*"Other composition requirements for passwords SHALL NOT be imposed."*) — so do not layer
+character-class rules on top of this score.
 
 ---
 
 ## What this is not
 
 - **Not a password manager** — does not store, transmit, or sync passwords.
-- **Not a hash function** — does not produce or verify hashes. Pair with **Argon2id** ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html)), scrypt, or PBKDF2 for storage, per the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); bcrypt only for legacy systems.
+- **Not a hash function** — does not produce or verify hashes. Pair with **Argon2id** (described in [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html), an Informational IRTF/CFRG document rather than a standards-track spec), or scrypt, per the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); PBKDF2 when FIPS-140 validation is required, and bcrypt only for legacy systems.
 - **Not a generator** — does not produce passwords. Use a CSPRNG-backed generator for that.
 - **Not a server-side validator** — runs in the React Native runtime (or any JS runtime). The score is a UX hint, not a server-side authorization gate.
 
@@ -324,17 +335,37 @@ imposed"* — so do not layer character-class rules on top of this score.
 
 ## Comparison
 
-| Feature | `react-native-password-intelligence` | `zxcvbn-ts` (vanilla) | `react-native-password-strength-meter` |
-|---|:---:|:---:|:---:|
-| Guess-count scoring (zxcvbn) | ✅ | ✅ | ⚠️ ad-hoc |
-| Turkish cultural intelligence layer | ✅ | ❌ | ❌ |
-| Turkish case repair (`İ`/`I`) | ✅ | ❌ | ❌ |
-| React Native UI component | ✅ | ❌ | ✅ |
-| Headless React hook | ✅ | ❌ | ❌ |
-| Per-call user inputs | ✅ | ✅ | ❌ |
-| Global custom dictionary API | ✅ | ⚠️ via setOptions | ❌ |
-| Long-input DoS guard | ✅ | ❌ | ❌ |
-| TypeScript strict + provenance publish | ✅ | ✅ | ❌ |
+| | this library | `@zxcvbn-ts/core` + [`language-tr`](https://www.npmjs.com/package/@zxcvbn-ts/language-tr) | `zxcvbn` (Dropbox) | `react-native-password-strength-meter` |
+|---|:---:|:---:|:---:|:---:|
+| Guess-count scoring | ✅ | ✅ | ✅ | ❌ character-class heuristic |
+| Turkish names, cities, major clubs | ✅ | ✅ | ❌ | ❌ |
+| ASCII-folded variants (`fenerbahce`, `ataturk`, `yilmaz`) | ✅ | ❌ | ❌ | ❌ |
+| Plate codes, club slang (`cimbom`), brand corpus | ✅ | ❌ | ❌ | ❌ |
+| Turkish-locale case repair (`İ` / `I`) | ✅ | ❌ | ❌ | ❌ |
+| Turkish feedback strings | ✅ | ✅ | ❌ | ❌ |
+| React Native UI component | ✅ | ❌ | ❌ | ✅ |
+| Headless React hook | ✅ | ❌ | ❌ | ❌ |
+| Per-call user inputs | ✅ | ✅ | ✅ | ❌ |
+| Global custom dictionary API | ✅ | ⚠️ constructor options | ❌ | ❌ |
+| Framework-agnostic core package | ✅ | ✅ | ✅ | ❌ |
+| Published with npm provenance | ✅ | ❌ | ❌ | ❌ |
+| Turkish + common-password bundle | **~37 kB gzip** | ~400 kB gzip | ~400 kB gzip | n/a |
+| Latest release | — | 2026-08 | **2017-02** | **2020-11** |
+
+Two rows deserve their footnotes rather than a checkmark.
+
+**We wrote `@zxcvbn-ts/language-tr`** ([PR #315](https://github.com/zxcvbn-ts/zxcvbn/pull/315)), so
+the Turkish rows above are not a competitor catching up — they are the same author's upstream work.
+That pack gives zxcvbn 30,000 Turkish frequency words, 10,000 Wikipedia titles, 1,794 first names,
+198 surnames and Turkish feedback strings. What it deliberately does not do is fold `fenerbahçe` to
+`fenerbahce`, know that `cimbom` means Galatasaray or that `34` means İstanbul, or carry a brand
+corpus. This library is the layer above it — and it costs ~37 kB instead of ~400 kB, because it
+vendors a 4,000-entry slice instead of the full common-password list.
+
+**There is no "long-input DoS guard" row**, because the honest version of that claim is too narrow
+to be a feature comparison: `@zxcvbn-ts/core` has had a `maxLength` option (default **256**, i.e.
+stricter than ours) since v2.2.1. See *Long-input safety* under
+[Engineering details](#engineering-details) for what this library actually does and why.
 
 ---
 
@@ -353,8 +384,28 @@ imposed"* — so do not layer character-class rules on top of this score.
 
 ### Performance notes
 
-- First `analyzePassword` call: ~30–80 ms cold (zxcvbn options registration + dictionary build). Re-applying options after a `configure()` call costs ~1 ms for the bundled dictionaries, ~8 ms for the full `language-common` set.
-- Subsequent calls: ~1–10 ms typical, ~50 ms worst case for inputs that trigger the Turkish case-repair second pass.
+zxcvbn's matcher cost grows steeply with input length, and that dominates everything else. Median
+of ten distinct random inputs per length, warmed, Node 22 on a desktop, at the default
+`maxLength` of 256:
+
+| Length | 8 | 16 | 32 | 64 | 128 | 256 and beyond |
+|---|---|---|---|---|---|---|
+| Median | 0.4 ms | 2.7 ms | 82 ms | 190 ms | 409 ms | ~890 ms |
+
+The last column is flat because anything past `maxLength` is truncated — a 4,096-character paste
+costs the same as a 256-character one. Raising the cap removes that ceiling: the same measurement
+at `maxLength: 1024` was **6.6 s** per call, which is why the default no longer sits there.
+
+- **Budget for this.** A 64-character password out of a password manager costs ~190 ms per call on
+  a desktop, and a mid-range Android phone is several times slower. `usePasswordRisk` is
+  synchronous and does **not** debounce, so that cost lands on every keystroke. If your form
+  accepts long passwords, debounce the value before you pass it in; an opt-in `debounceMs` is on
+  the 1.0.0 roadmap.
+- First `analyzePassword` call in a fresh process: ~38 ms (zxcvbn options registration + dictionary
+  build). Re-applying options after `configure()` costs ~1 ms for the bundled dictionaries and
+  ~15 ms for the full `language-common` set.
+- The Turkish case-repair second pass roughly doubles the cost of the inputs that trigger it, which
+  are rare — pure-ASCII input never does.
 - Dictionary footprint: 12 Turkish categories (~5 kB gzip) + 4,000 common passwords (~17 kB gzip) + 6 keyboard layouts (~3 kB gzip).
 - The hook memoizes by the JSON-stringified value of `(password, userInputs)`, so re-renders with the same input cost a single `JSON.parse`.
 
