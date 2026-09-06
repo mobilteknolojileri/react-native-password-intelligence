@@ -185,7 +185,7 @@ analyzePassword(
 
 | Field | Type | Notes |
 |---|---|---|
-| `password` | `string` | Non-string values are coerced to `''`. Inputs longer than 1,024 characters are truncated. |
+| `password` | `string` | Non-string values are coerced to `''`. Input is normalised to NFC, and anything past 256 characters is truncated. |
 | `userInputs` | `readonly (string \| number)[]` | Optional. Per-call values penalised alongside the global custom dictionary; strings are matched in Turkish, compact and ASCII-folded forms. |
 
 Returns the full [`ZxcvbnResult`](https://github.com/zxcvbn-ts/zxcvbn) with `score`, `feedback`, `crackTimesDisplay`, `crackTimesSeconds`, `guesses`, `sequence`, etc.
@@ -241,11 +241,11 @@ configure({ dictionaries: dictionary, graphs: adjacencyGraphs });
 | Option | Purpose |
 |---|---|
 | `dictionaries` | Extra zxcvbn dictionaries, merged over the bundled ones key by key |
-| `graphs` | Replaces the bundled keyboard adjacency graphs |
+| `graphs` | Extra keyboard adjacency graphs, merged over the bundled ones layout by layout |
 | `translations` | Replaces the bundled Turkish feedback strings. Any `@zxcvbn-ts/language-*` translations object works; add a `dictionaryWarnings` map (keyed by dictionary name) to translate the Turkish-category warnings too, otherwise those matches return `warning: null` rather than mixing languages |
 | `disableTurkishDictionaries` | Ship only the English list |
 | `disableBundledPasswords` | Ship only the Turkish categories |
-| `maxLength` | Characters analysed before truncation (default 1024) |
+| `maxLength` | Characters analysed before truncation (default 256, matching `@zxcvbn-ts/core`) |
 | `useLevenshteinDistance`, `levenshteinThreshold` | Passed through to zxcvbn |
 
 `configure()` validates synchronously and throws a `TypeError` / `RangeError` on an invalid option (`maxLength` must be a positive integer, `translations` must contain every zxcvbn key, dictionaries must be arrays, …) without touching the current configuration.
@@ -292,31 +292,42 @@ The scale is zxcvbn-ts's 0–4 band, derived from estimated guess counts rather 
 
 ## Standards
 
-NIST SP 800-63B [§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html) requires verifiers to
-compare a prospective password against *"a blocklist that contains known commonly used, expected, or
-compromised passwords"* — explicitly including **dictionary words** and **context-specific words,
-such as the name of the service, the username, and derivatives thereof** — and to *"offer guidance
-to the subscriber to help the subscriber choose a strong password."*
+NIST SP 800-63B-4 §3.1.1.2 *Password Verifiers*
+([HTML](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver) ·
+[DOI](https://doi.org/10.6028/NIST.SP.800-63b-4)) requires that *"verifiers SHALL compare the
+prospective secret against a blocklist that contains known commonly used, expected, or compromised
+passwords."* **Dictionary words** and **context-specific words, such as the name of the service,
+the username, and derivatives thereof** appear there as example entries — the standard's wording is
+*"For example, the list may include…"*, not a mandated set. Verifiers must also *"offer guidance to
+the subscriber to help the subscriber choose a strong password."*
 
-This library helps you implement that requirement:
+One sentence in that section matters more than the rest for a library like this one:
 
-| 800-63B §3.1.1.2 asks for | This library provides |
+> *"The entire password SHALL be subject to comparison, not substrings or words that might be
+> contained therein."*
+
+zxcvbn is a substring and pattern matcher by construction, which is the opposite of the
+whole-password membership test §3.1.1.2 prescribes. So be precise about what you get:
+
+| 800-63B-4 §3.1.1.2 asks for | This library |
 |---|---|
-| Blocklist of dictionary words | Turkish regional corpus + bundled common-password list |
-| Context-specific words (username, service name, derivatives) | `userInputs` per call, `addCustomDictionary` globally |
+| Whole-password comparison against a blocklist | **Does not do this.** No client-side scorer can. Run it verifier-side; the corpora here are a reasonable input to one. |
+| Context-specific words (username, service name, derivatives) | `userInputs` per call, `addCustomDictionary` globally — as scoring signals, not as a blocklist |
 | Guidance to the subscriber | Turkish `feedback.warning` and `feedback.suggestions` |
 
 **It does not make you compliant.** 800-63B places the check on the *verifier*; this runs
 client-side and returns a score, it does not reject anything. Enforcement must happen server-side.
-Note also that the same section states *"other composition requirements for passwords SHALL NOT be
-imposed"* — so do not layer character-class rules on top of this score.
+Note also that §3.1.1.2 item 5 states *"Verifiers and CSPs SHALL NOT impose other composition rules
+(e.g., requiring mixtures of different character types) for passwords"* (§3.1.1.1 puts it as
+*"Other composition requirements for passwords SHALL NOT be imposed."*) — so do not layer
+character-class rules on top of this score.
 
 ---
 
 ## What this is not
 
 - **Not a password manager** — does not store, transmit, or sync passwords.
-- **Not a hash function** — does not produce or verify hashes. Pair with **Argon2id** ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html)), scrypt, or PBKDF2 for storage, per the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); bcrypt only for legacy systems.
+- **Not a hash function** — does not produce or verify hashes. Pair with **Argon2id** (described in [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html), an Informational IRTF/CFRG document rather than a standards-track spec), or scrypt, per the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); PBKDF2 when FIPS-140 validation is required, and bcrypt only for legacy systems.
 - **Not a generator** — does not produce passwords. Use a CSPRNG-backed generator for that.
 - **Not a server-side validator** — runs in the React Native runtime (or any JS runtime). The score is a UX hint, not a server-side authorization gate.
 
@@ -324,37 +335,81 @@ imposed"* — so do not layer character-class rules on top of this score.
 
 ## Comparison
 
-| Feature | `react-native-password-intelligence` | `zxcvbn-ts` (vanilla) | `react-native-password-strength-meter` |
-|---|:---:|:---:|:---:|
-| Guess-count scoring (zxcvbn) | ✅ | ✅ | ⚠️ ad-hoc |
-| Turkish cultural intelligence layer | ✅ | ❌ | ❌ |
-| Turkish case repair (`İ`/`I`) | ✅ | ❌ | ❌ |
-| React Native UI component | ✅ | ❌ | ✅ |
-| Headless React hook | ✅ | ❌ | ❌ |
-| Per-call user inputs | ✅ | ✅ | ❌ |
-| Global custom dictionary API | ✅ | ⚠️ via setOptions | ❌ |
-| Long-input DoS guard | ✅ | ❌ | ❌ |
-| TypeScript strict + provenance publish | ✅ | ✅ | ❌ |
+| | this library | `@zxcvbn-ts/core` + [`language-tr`](https://www.npmjs.com/package/@zxcvbn-ts/language-tr) | `zxcvbn` (Dropbox) | `react-native-password-strength-meter` |
+|---|:---:|:---:|:---:|:---:|
+| Guess-count scoring | ✅ | ✅ | ✅ | ❌ character-class heuristic |
+| Turkish names, cities, major clubs | ✅ | ✅ | ❌ | ❌ |
+| ASCII-folded variants (`fenerbahce`, `ataturk`, `yilmaz`) | ✅ | ❌ | ❌ | ❌ |
+| Plate codes, club slang (`cimbom`), brand corpus | ✅ | ❌ | ❌ | ❌ |
+| Turkish-locale case repair (`İ` / `I`) | ✅ | ❌ | ❌ | ❌ |
+| Turkish feedback strings | ✅ | ✅ | ❌ | ❌ |
+| React Native UI component | ✅ | ❌ | ❌ | ✅ |
+| Headless React hook | ✅ | ❌ | ❌ | ❌ |
+| Per-call user inputs | ✅ | ✅ | ✅ | ❌ |
+| Global custom dictionary API | ✅ | ⚠️ constructor options | ❌ | ❌ |
+| Framework-agnostic core package | ✅ | ✅ | ✅ | ❌ |
+| Published with npm provenance | ✅ | ❌ | ❌ | ❌ |
+| Turkish + common-password bundle | **~37 kB gzip** | ~400 kB gzip | ~400 kB gzip | n/a |
+| Latest release | — | 2026-08 | **2017-02** | **2020-11** |
+
+Two rows deserve their footnotes rather than a checkmark.
+
+**We wrote `@zxcvbn-ts/language-tr`** ([PR #315](https://github.com/zxcvbn-ts/zxcvbn/pull/315)), so
+the Turkish rows above are not a competitor catching up — they are the same author's upstream work.
+That pack gives zxcvbn 30,000 Turkish frequency words, 10,000 Wikipedia titles, 1,794 first names,
+198 surnames and Turkish feedback strings. What it deliberately does not do is fold `fenerbahçe` to
+`fenerbahce`, know that `cimbom` means Galatasaray or that `34` means İstanbul, or carry a brand
+corpus. This library is the layer above it — and it costs ~37 kB instead of ~400 kB, because it
+vendors a 4,000-entry slice instead of the full common-password list.
+
+**There is no "long-input DoS guard" row**, because the honest version of that claim is too narrow
+to be a feature comparison: `@zxcvbn-ts/core` has had a `maxLength` option (default **256**, i.e.
+stricter than ours) since v2.2.1. See *Long-input safety* under
+[Engineering details](#engineering-details) for what this library actually does and why.
 
 ---
 
 ## Engineering details
 
 - **Deferred initialization** — zxcvbn options (translations, dictionaries) register on the first `analyzePassword` call, not at import time. A screen that never analyzes a password pays no setup cost.
-- **~34 kB gzip, not 236 kB** — the core package vendors a frequency-ordered top-4,000 English password list (measured by `scripts/check-size.mjs` on the ESM output; `@zxcvbn-ts/core` adds ~20 kB either way) instead of pulling in the full 49,233-entry `@zxcvbn-ts/language-common` (229 kB gzip). `configure()` restores full coverage when you want it. Until 0.4.0 that dependency was a static import in the root entry chain, so `sideEffects: false` could not remove it — deferring the *call* does not defer the *import*, and Metro does not tree-shake at all.
+- **~37 kB gzip, not 236 kB** — the core package vendors a frequency-ordered top-4,000 English password list (measured by `scripts/check-size.mjs` on the ESM output; `@zxcvbn-ts/core` adds ~20 kB either way) instead of pulling in the full 49,233-entry `@zxcvbn-ts/language-common` (229 kB gzip). `configure()` restores full coverage when you want it. Until 0.4.0 that dependency was a static import in the root entry chain, so `sideEffects: false` could not remove it — deferring the *call* does not defer the *import*, and Metro does not tree-shake at all.
 - **Tree-shakeable** — `sideEffects: false`, so bundlers that support it can drop the UI component and hook for consumers who only import `analyzePassword`. On React Native, install `password-intelligence` instead to skip them entirely.
-- **Long-input safety** — passwords longer than 1,024 characters are truncated before zxcvbn sees them, capping the O(n²) matcher's worst-case cost.
-- **Targeted Turkish case repair** — the password is scored *as typed*, so uppercase entropy and zxcvbn's capitalization feedback survive. Unicode default casing breaks matching in two places — the dotted capital `İ` (mapped to `i` + U+0307) and an ASCII `I` next to other Turkish letters (`ŞANLIURFA` lowercases to `şanliurfa`, which is neither `şanlıurfa` nor `sanliurfa`) — so only such inputs get an ASCII-folded second pass. The lower score wins and `result.password` always echoes the input.
+- **Long-input safety** — passwords longer than 256 characters are truncated before zxcvbn sees
+  them. This is load-bearing rather than redundant: `@zxcvbn-ts/core` v3 does have its own
+  `maxLength`, but applies it only inside `zxcvbnAsync`, so the synchronous `zxcvbn()` this library
+  calls receives the raw string. Note that the cap bounds the worst case, it does not make long
+  inputs cheap — see [Performance notes](#performance-notes) for what length actually costs.
+- **Targeted Turkish case repair** — the password is scored *as typed*, so uppercase entropy and zxcvbn's capitalization feedback survive. Unicode default casing breaks matching in two places — the dotted capital `İ` (mapped to `i` + U+0307) and an ASCII `I` next to other Turkish letters (`ŞANLIURFA` lowercases to `şanliurfa`, which is neither `şanlıurfa` nor `sanliurfa`) — so only such inputs get an ASCII-folded second pass. The lower score wins, and `result.password` echoes the NFC-normalised input.
 - **Turkish feedback by default** — warning and suggestion strings are returned in Turkish, matching the dictionary intelligence, and Turkish dictionary matches explain themselves (team, city, brand, …) under the same rule zxcvbn applies to its own warnings: never for a password that already scores 3 or 4. To use English, install `@zxcvbn-ts/language-en` and pass its `translations` to `configure()`.
-- **Industry-grade tests** — 210+ tests gated at 85% lines / 80% functions / 75% branches, plus a CI gzip budget and a tarball-contents check. A 30-input score-regression snapshot guards against accidental drift in dictionary or scoring updates.
+- **Industry-grade tests** — 230+ tests gated at 85% lines / 80% functions / 75% branches, plus a CI gzip budget and a tarball-contents check. A 30-input score-regression snapshot guards against accidental drift in dictionary or scoring updates.
 - **Strict TypeScript** — `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, `isolatedModules`, `useDefineForClassFields`.
 - **Zero native code** — pure JavaScript, works on Expo, iOS, Android, and Web.
 - **Single-locale today** — the architecture is one Turkish dictionary deeply, not a plugin system. `configure({ dictionaries })` already lets you add any locale's corpus at runtime; a first-class locale-plugin abstraction is on the 1.0.0 roadmap.
 
 ### Performance notes
 
-- First `analyzePassword` call: ~30–80 ms cold (zxcvbn options registration + dictionary build). Re-applying options after a `configure()` call costs ~1 ms for the bundled dictionaries, ~8 ms for the full `language-common` set.
-- Subsequent calls: ~1–10 ms typical, ~50 ms worst case for inputs that trigger the Turkish case-repair second pass.
+zxcvbn's matcher cost grows steeply with input length, and that dominates everything else. Median
+of ten distinct random inputs per length, warmed, Node 22 on a desktop, at the default
+`maxLength` of 256:
+
+| Length | 8 | 16 | 32 | 64 | 128 | 256 and beyond |
+|---|---|---|---|---|---|---|
+| Median | 0.4 ms | 2.7 ms | 82 ms | 190 ms | 409 ms | ~890 ms |
+
+The last column is flat because anything past `maxLength` is truncated — a 4,096-character paste
+costs the same as a 256-character one. Raising the cap removes that ceiling: the same measurement
+at `maxLength: 1024` was **6.6 s** per call, which is why the default no longer sits there.
+
+- **Budget for this.** A 64-character password out of a password manager costs ~190 ms per call on
+  a desktop, and a mid-range Android phone is several times slower. `usePasswordRisk` is
+  synchronous and does **not** debounce, so that cost lands on every keystroke. If your form
+  accepts long passwords, debounce the value before you pass it in; an opt-in `debounceMs` is on
+  the 1.0.0 roadmap.
+- First `analyzePassword` call in a fresh process: ~38 ms (zxcvbn options registration + dictionary
+  build). Re-applying options after `configure()` costs ~1 ms for the bundled dictionaries and
+  ~15 ms for the full `language-common` set.
+- The Turkish case-repair second pass roughly doubles the cost of the inputs that trigger it, which
+  are rare — pure-ASCII input never does.
 - Dictionary footprint: 12 Turkish categories (~5 kB gzip) + 4,000 common passwords (~17 kB gzip) + 6 keyboard layouts (~3 kB gzip).
 - The hook memoizes by the JSON-stringified value of `(password, userInputs)`, so re-renders with the same input cost a single `JSON.parse`.
 
