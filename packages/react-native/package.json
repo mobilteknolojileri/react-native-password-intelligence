@@ -1,6 +1,6 @@
 {
   "name": "react-native-password-intelligence",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Turkish-first password strength estimator for React Native — detects regional patterns (names, surnames, football, plates, brands) and ships an animated meter, headless hook, and pure analyzer.",
   "source": "./src/index.ts",
   "main": "./lib/commonjs/index.js",
@@ -77,7 +77,7 @@
     "provenance": true
   },
   "dependencies": {
-    "password-intelligence": "^0.4.0"
+    "password-intelligence": "^0.4.1"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

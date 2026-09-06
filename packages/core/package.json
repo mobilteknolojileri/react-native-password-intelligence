@@ -1,6 +1,6 @@
 {
   "name": "password-intelligence",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Framework-agnostic, Turkish-first password strength estimator. Regional pattern intelligence (names, surnames, football clubs, city plates, brands) on top of zxcvbn-ts, in a ~34 kB gzip default bundle.",
   "source": "./src/index.ts",
   "main": "./lib/commonjs/index.js",
