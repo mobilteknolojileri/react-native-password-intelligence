@@ -37,21 +37,38 @@ in one call. Contributions that want to add a locale before this lands should op
 The bundled graphs cover QWERTY, QWERTZ, AZERTY, Dvorak and both keypads. The Turkish-F layout is
 genuinely different and is used by a non-trivial number of Turkish typists, so walks on it are
 currently invisible to the spatial matcher. This is hand-authored data, not something that can be
-derived — a good first contribution.
+derived - a good first contribution.
+
+`configure({ graphs })` merges layout by layout, so a contribution - or a consumer registering
+the layout at runtime - can add Turkish-F on its own without disturbing the bundled six.
 
 ### `debounceMs` on `usePasswordRisk`
 
-`analyzePassword` measures ~8 ms per call on a desktop; on a mid-range Android that is plausibly
-30–80 ms per keystroke. The hook memoizes but does not debounce, so a fast typist pays that cost
-on every character. Either an opt-in `debounceMs` option or documented use of zxcvbn's own
-`debounce` helper.
+`analyzePassword` costs ~1 ms for an eight-character password, ~80 ms at 32 characters and ~230 ms
+at 64, measured on a desktop - see the table under Performance notes in the README. A mid-range
+Android is several times slower. The hook memoizes but does not debounce, so a fast typist pays
+that cost on every character, and a password-manager paste into `<PasswordMeter />` visibly stalls
+the JS thread today. This is the most urgent item on this list rather than a nicety. Either an
+opt-in `debounceMs` option or documented use of zxcvbn's own `debounce` helper.
 
 ### `@zxcvbn-ts` v4 migration
 
-v4 is an API rewrite rather than a version bump: `zxcvbn` and `zxcvbnOptions` are gone,
-`crackTimesDisplay` is renamed, and dictionary keys changed (`passwords` → `passwords-common`).
-Because this library re-exports `ZxcvbnResult`, the migration is breaking for consumers too and
-therefore belongs to a major release.
+v4 is an API rewrite rather than a version bump. The parts that touch this library:
+
+- `zxcvbn`, `zxcvbnAsync` and `zxcvbnOptions` are **removed**, replaced by
+  `new ZxcvbnFactory(options, customMatchers).check()`.
+- `crackTimesSeconds` and `crackTimesDisplay` are merged into one `crackTimes` object whose keys
+  lost their `1e10`/`1e4` infixes. `PasswordRiskResult.crackTimeDisplay` is derived from those, so
+  this is breaking for consumers too.
+- Dictionary keys are namespaced: `passwords` → `passwords-common`, `diceware` → `diceware-common`,
+  `commonWords` → `commonWords-en`. `core/engine.ts` switches on the old names, so this breaks
+  silently rather than loudly — it is the migration's real hazard.
+- The `commonWords` source moved from FrequencyWords 2018 to OpenSubtitles 2024, which upstream
+  notes "can result in a different scoring". The 30-input regression snapshot will move.
+- Language packs gained `wordSequences` and a matcher for them, changing passphrase scoring.
+
+Because of the re-exported result type, this belongs to a major release. Until it lands, the
+dependency stays pinned to `^3.0.4`.
 
 ---
 
