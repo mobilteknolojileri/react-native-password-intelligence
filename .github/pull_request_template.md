@@ -28,7 +28,7 @@
 
 ## Score-regression check (for `core:` or `dict:` changes)
 
-If this PR changes the analyzer or any dictionary, has the score-regression snapshot in `src/__tests__/analyzer.test.ts` been reviewed? Any deliberate score shifts must be called out in the PR description and in the CHANGELOG migration section.
+If this PR changes the analyzer or any dictionary, has the score-regression snapshot in `packages/core/src/__tests__/analyzer.test.ts` been reviewed? Any deliberate score shifts must be called out in the PR description and in the CHANGELOG migration section.
 
 - [ ] Snapshot fixture reviewed
 - [ ] Deliberate shifts documented (or N/A)
