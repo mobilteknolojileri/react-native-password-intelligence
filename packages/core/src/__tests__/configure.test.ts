@@ -68,7 +68,144 @@ describe('configure', () => {
     expect(analyzePassword('password' + 'Xq7#Zm2!'.repeat(4)).score).toBe(0);
   });
 
+  describe('graphs', () => {
+    it('merges a custom layout over the bundled ones instead of replacing them', () => {
+      // Registering a single layout used to wipe all six bundled graphs, which
+      // is exactly what a Turkish-F contribution would have done.
+      const before = analyzePassword('xcvbnm,./');
+      expect(before.sequence.some((m) => m.pattern === 'spatial')).toBe(true);
+
+      configure({ graphs: { customLayout: { a: ['b'] } } });
+
+      const after = analyzePassword('xcvbnm,./');
+      expect(after.sequence.some((m) => m.pattern === 'spatial')).toBe(true);
+      expect(after.score).toBe(before.score);
+    });
+
+    it('merges across repeated calls instead of dropping the earlier layout', () => {
+      configure({ graphs: { alphaLayout: { a: ['b'] } } });
+      configure({ graphs: { betaLayout: { c: ['d'] } } });
+      analyzePassword('apply');
+
+      expect(Object.keys(zxcvbnOptions.graphs)).toEqual(
+        expect.arrayContaining(['alphaLayout', 'betaLayout', 'qwerty'])
+      );
+    });
+
+    it('rejects a malformed layout instead of throwing at analysis time', () => {
+      expect(() => configure({ graphs: { bad: null as never } })).toThrow(
+        TypeError
+      );
+      expect(() =>
+        configure({ graphs: { bad: { a: 'notanarray' as never } } })
+      ).toThrow(TypeError);
+
+      expect(() => analyzePassword('abc')).not.toThrow();
+    });
+
+    it('rejects adjacency entries that are neither a string nor null', () => {
+      // The spatial matcher calls `.indexOf()` on each entry, so a number slips
+      // past an Array.isArray check and throws at analysis time instead.
+      expect(() => configure({ graphs: { bad: { a: [3 as never] } } })).toThrow(
+        TypeError
+      );
+      expect(() =>
+        configure({ graphs: { bad: { a: [{} as never] } } })
+      ).toThrow(TypeError);
+
+      // `null` marks an empty slot and must stay valid.
+      expect(() =>
+        configure({ graphs: { ok: { a: ['b', null] } } })
+      ).not.toThrow();
+      expect(() => analyzePassword('abc')).not.toThrow();
+    });
+  });
+
+  describe('option merge semantics', () => {
+    it('ignores a key set to undefined rather than resetting it', () => {
+      // `configure({ maxLength: props.maxLength })` with an optional prop must
+      // not silently widen a limit that was deliberately narrowed.
+      const long = 'Tr0ub4dor&3-uzun-parola-buraya';
+      configure({ maxLength: 8 });
+      const narrowed = analyzePassword(long).score;
+
+      // `exactOptionalPropertyTypes` forbids writing this literally, but the
+      // flag is off by default, so every JavaScript caller and most TypeScript
+      // ones can still reach this shape.
+      configure({ maxLength: undefined as unknown as number });
+
+      expect(analyzePassword(long).score).toBe(narrowed);
+    });
+
+    it('propagates maxLength to zxcvbn so the two limits cannot disagree', () => {
+      configure({ maxLength: 64 });
+      analyzePassword('apply');
+      expect(zxcvbnOptions.maxLength).toBe(64);
+    });
+
+    it('reverts a foreign setOptions write on the next analysis', () => {
+      // The dirty flag records our own intent, not the singleton's state, so
+      // without an identity check another module's write would stick forever.
+      analyzePassword('apply');
+      const foreign = JSON.parse(
+        JSON.stringify(zxcvbnOptions.translations)
+      ) as typeof trTranslations;
+      foreign.warnings.straightRow = 'FOREIGN';
+      zxcvbnOptions.setOptions({ translations: foreign });
+
+      analyzePassword('qwertyui');
+
+      expect(zxcvbnOptions.translations.warnings.straightRow).not.toBe(
+        'FOREIGN'
+      );
+    });
+
+    it('restores zxcvbn defaults this library never sets on reset', () => {
+      // `setOptions` only assigns the keys present, so a field we omit could
+      // never be reverted once application code had written to it.
+      zxcvbnOptions.setOptions({ l33tMaxSubstitutions: 3 });
+      resetConfiguration();
+      analyzePassword('apply');
+      expect(zxcvbnOptions.l33tMaxSubstitutions).toBe(100);
+    });
+  });
+
+  describe('consumer dictionaries', () => {
+    it('folds entries so natural casing still matches', () => {
+      // zxcvbn matches entries verbatim against a lowercased password, so an
+      // entry written in natural casing used to match nothing at all.
+      configure({ dictionaries: { corp: ['AcmeHolding'] } });
+      expect(analyzePassword('AcmeHolding').score).toBe(0);
+      expect(analyzePassword('acmeholding').score).toBe(0);
+    });
+
+    it('folds Turkish entries the same way the bundled categories are folded', () => {
+      configure({ dictionaries: { corp: ['Şişecam'] } });
+      expect(analyzePassword('sisecam').score).toBe(0);
+    });
+  });
+
   describe('validation', () => {
+    it('rejects a non-boolean value for the disable flags', () => {
+      expect(() => configure({ disableBundledPasswords: 1 as never })).toThrow(
+        TypeError
+      );
+      expect(() =>
+        configure({ disableTurkishDictionaries: 'yes' as never })
+      ).toThrow(TypeError);
+    });
+
+    it('rejects a dictionary containing a non-string entry', () => {
+      // Accepting it left every later analyzePassword() throwing forever: the
+      // dirty flag is only cleared after setOptions returns, so the failure
+      // repeated on every keystroke with no way back but resetConfiguration().
+      expect(() =>
+        configure({ dictionaries: { blocklist: ['acme', null as never] } })
+      ).toThrow(TypeError);
+
+      expect(() => analyzePassword('acme123')).not.toThrow();
+    });
+
     it.each([
       [{ maxLength: 0 }, RangeError],
       [{ maxLength: -3 }, RangeError],
