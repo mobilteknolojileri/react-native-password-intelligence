@@ -38,8 +38,36 @@ const ASCII_MAP: Readonly<Record<string, string>> = {
 const TURKISH_LETTER = /[çğıöşüÇĞİÖŞÜ]/;
 const DOTTED_CAPITAL_I = /\u0130/g;
 const ASCII_CAPITAL_I = /I/g;
-const I_WITH_COMBINING_DOT = /i\u0307/g;
+/**
+ * `i` or `I` followed by U+0307 (combining dot above). Two very different
+ * inputs land here: the result of lowercasing U+0130 with default casing,
+ * and the NFD (decomposed) form of U+0130 itself - what macOS and iOS put
+ * on the clipboard, and what any `normalize('NFD')` pipeline produces.
+ */
+const I_WITH_COMBINING_DOT = /([iI])\u0307/g;
+const CAPITAL_I_WITH_COMBINING_DOT = /I\u0307/g;
 const COMPACT_PATTERN = /[\s'"‘’“”.\-–— ]+/g;
+
+/**
+ * Composes decomposed characters back together (NFD -> NFC).
+ *
+ * This is not cosmetic. `S` + U+0327 is the decomposed form of a Turkish
+ * cedilla-S, and nothing in the pipeline below recognises it: the letter test
+ * misses it, the ASCII map misses it, and zxcvbn's own lowercasing leaves the
+ * combining mark in place. macOS and iOS deliver exactly this form from the
+ * clipboard, so `GUMUSHANE` typed on a phone could score 4 while the composed
+ * spelling scored 0.
+ *
+ * `String.prototype.normalize` is ES2015, but a few minimal engines ship it as
+ * a stub, so a failure degrades to the input rather than throwing.
+ */
+export const toNfc = (value: string): string => {
+  try {
+    return value.normalize('NFC');
+  } catch {
+    return value;
+  }
+};
 
 /**
  * Locale-independent Turkish lowercasing: `I` -> `ı`, `İ` -> `i`, everything
@@ -47,7 +75,10 @@ const COMPACT_PATTERN = /[\s'"‘’“”.\-–— ]+/g;
  * letters that differ, without depending on the engine's ICU data.
  */
 export const lowerTurkish = (value: string): string =>
-  value
+  toNfc(value)
+    // Decomposed U+0130 first, so the next replace cannot mistake its
+    // `I` for a bare ASCII capital and fold it to a dotless one.
+    .replace(CAPITAL_I_WITH_COMBINING_DOT, 'i')
     .replace(ASCII_CAPITAL_I, 'ı')
     .replace(DOTTED_CAPITAL_I, 'i')
     .toLowerCase()
@@ -100,7 +131,7 @@ export const buildTurkishDictionary = (words: Iterable<string>): string[] => {
   return output;
 };
 
-const NEEDS_DOTTED_REPAIR = /\u0130|i\u0307/;
+const NEEDS_DOTTED_REPAIR = /\u0130|[iI]\u0307/;
 const HAS_ASCII_CAPITAL_I = /I/;
 
 /**
@@ -120,5 +151,28 @@ export const repairTurkishCase = (value: string): string => {
     NEEDS_DOTTED_REPAIR.test(value) ||
     (HAS_ASCII_CAPITAL_I.test(value) && TURKISH_LETTER.test(value));
   if (!needsRepair) return value;
-  return toAsciiTurkish(value.replace(I_WITH_COMBINING_DOT, 'i'));
+  return toAsciiTurkish(value.replace(I_WITH_COMBINING_DOT, '$1'));
+};
+
+/**
+ * Maps every index of `repairTurkishCase(value)` back to the index in `value`
+ * that produced it, or `null` when the repair preserved length.
+ *
+ * ASCII folding is one-to-one, so the only length change is the collapse of
+ * `i`/`I` + U+0307 into a single character. When that happens, a match found
+ * in the repaired string indexes a shorter string than the password reported
+ * back to the caller, and `sequence[].i`/`.j` would span the wrong characters.
+ */
+export const mapRepairedIndices = (value: string): readonly number[] | null => {
+  const indices: number[] = [];
+  let dropped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const previous = value[index - 1];
+    if (value[index] === '\u0307' && (previous === 'i' || previous === 'I')) {
+      dropped = true;
+      continue;
+    }
+    indices.push(index);
+  }
+  return dropped ? indices : null;
 };
