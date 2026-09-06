@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - unreleased
+## [0.4.0] - 2026-09-06
 
 ### Changed
 
@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.3.0 statically imported `@zxcvbn-ts/language-common`, forcing **229 kB gzip** of dictionary
   data (49,233 passwords + 7,776 diceware words) into every consumer's bundle. Metro does not
   tree-shake, so React Native apps had no way to opt out. 0.4.0 vendors a frequency-ordered
-  **top-4,000** slice instead. The published bundle drops from **236.3 kB to ~34 kB gzip (7x
+  **top-4,000** slice instead. The published bundle drops from **236.3 kB to ~37 kB gzip (6x
   smaller)** for the core package's own code (`@zxcvbn-ts/core` adds ~20 kB either way).
 
   **What this costs you:** passwords ranked 4,000-49,233 no longer match. Measured over a sample
@@ -35,11 +35,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   If you gate account creation on `score >= 3`, either restore the full dictionary or move the
   check server-side against a breach corpus (HIBP k-anonymity).
 
+  **The diceware list went with it, and it has no lite replacement.**
+  `@zxcvbn-ts/language-common` shipped two dictionaries, not one: `passwords` (49,233) and
+  `diceware` (7,776). Only `passwords` was replaced by a frequency-ordered slice. Diceware words
+  are equiprobable and the list is in dice order, so a prefix would just be "the ones starting with
+  a-f", and vendoring all of it costs 25 kB gzip - which would blow the 40 kB budget the shrink
+  exists to defend. Measured on a stride sample of the full list, **about one diceware word in five
+  now scores 3 or higher** (0% before), and a two-word passphrase such as `abacusflagon` scores 4
+  where the full dictionary gave 3. If your users pick diceware or EFF-wordlist passphrases,
+  restore the full dictionary with the two lines above. The regression is pinned by
+  `dictionaryParity.test.ts` so it cannot drift unnoticed.
+
 - **Passwords are no longer lowercased before scoring.** 0.3.0 scored both `toLowerCase()` and
   `toLocaleLowerCase('tr-TR')` and returned the lower score, which discarded uppercase entropy on
   every mixed-case password and made zxcvbn's `capitalization` / `allUppercase` suggestions
   unreachable. Mixed-case passwords now score **higher** (correctly): `SunFlower77` 2 -> 3,
   `QwErTy123` 0 -> 1. Turkish detection is unaffected - see the `İ` repair under *Fixed*.
+
+- **Input is normalised to NFC before analysis.** `result.password` therefore echoes the composed
+  form of what you passed, which renders identically but may differ in code-unit length from an
+  NFD input. This is what makes decomposed Turkish letters work at all - see *Fixed*.
+
+- **`maxLength` now defaults to 256, not 1,024.** This matches `@zxcvbn-ts/core`'s own default, and
+  the value is now propagated to the zxcvbn singleton so the two limits cannot disagree. The
+  matcher's cost grows steeply with length: at the old cap a single call took ~6.6 s on a desktop,
+  at 256 it is ~1.2 s. Nothing realistic changes score, since any 256-character password already
+  scores 4. Pass `configure({ maxLength })` if you need the old ceiling.
+
+- **`configure({ graphs })` merges instead of replacing**, both over the bundled layouts and
+  across repeated calls — matching how `dictionaries` already behaved. Registering one custom
+  layout used to silently disable spatial matching for all six bundled layouts, and a second
+  `configure({ graphs })` call used to drop the layout added by the first. If you were relying on
+  the replacement behaviour to *remove* a bundled layout, that no longer works.
+
+- **A `configure()` key set to `undefined` is ignored rather than reset.** `configure({ maxLength:
+  props.max })` with an optional prop used to silently widen a limit that had been narrowed on
+  purpose. `dictionaries` already behaved this way; every key is now consistent. Use
+  `resetConfiguration()` to revert.
+
+- **Consumer dictionaries passed to `configure({ dictionaries })` are now case-folded** the same
+  way the bundled categories are. zxcvbn matches entries verbatim against a default-lowercased
+  password, so an entry written `AcmeHolding` previously matched nothing at all, silently.
 
 - `raw.sequence[].dictionaryName` for custom-dictionary hits changed from `userInputs` to `custom`,
   and the Turkish first-name dictionary is now `turkish_firstnames` instead of `turkish_names`
@@ -123,6 +159,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The custom dictionary is registered once, not re-spread on every keystroke.** 0.3.0 spread up to
   10,000 entries into `userInputs` on every call; entries are now a real zxcvbn dictionary applied
   on change (measured: 1,200 analyses 17.9 s -> 14.5 s at the 10k cap).
+
+- **Decomposed (NFD) Turkish letters are matched.** `S` + U+0327 and friends reached no matcher at
+  all, so text pasted from a macOS or iOS clipboard scored as if it were random: `GÜMÜŞHANE` scored
+  **4** in NFD against 0 composed, `ŞANLIURFA` 3 against 0, `ÖZTÜRK` 2 against 0. Any `score >= 3`
+  signup gate was bypassable by pasting rather than typing.
+
+- **`userInputs` entries that are not strings or numbers are dropped instead of thrown on.**
+  zxcvbn calls `.toString()` on every entry, so a `null` - which `usePasswordRisk` manufactures out
+  of `undefined` or `NaN` through its JSON round-trip - crashed the render tree. The README's own
+  `[user.firstName, user.email]` pattern threw while a profile was still loading.
+
+- **An invalid dictionary or graph is rejected by `configure()` rather than by every later
+  analysis.** `configure({ dictionaries: { list: ['a', null] } })` and
+  `configure({ graphs: { bad: null } })` were both accepted, and every subsequent
+  `analyzePassword` then threw permanently - the dirty flag is only cleared after `setOptions`
+  returns, so nothing short of `resetConfiguration()` recovered.
+
+- **The case-repair pass compares guess counts, not score bands.** The five-bucket score ties
+  constantly, and on a tie the un-repaired analysis won: `İstanbul-2024-Xq7` reported 3.0e15
+  guesses instead of 1.0e11, with the Turkish city match missing from `sequence` entirely.
+
+- **`addCustomDictionary` deduplicates on the folded form.** `Acme`, `ACME` and `acme ` build the
+  same entries but each consumed a slot of the 10,000 cap and bumped the configuration revision,
+  re-ranking the dictionary and re-rendering every mounted meter three times over.
+
+- **One engine state across the CJS and ESM builds.** A bundler resolving `import` to one build and
+  `require` to the other loaded both into the same realm - two copies of the configuration over one
+  shared zxcvbn singleton, so a word registered through `addCustomDictionary` could come back
+  scoring 4. State now lives behind a `Symbol.for` key on `globalThis`.
+
+- **zxcvbn defaults this library never sets are re-emitted on every apply**, so `l33tTable` and
+  `l33tMaxSubstitutions` written by application code can be reverted by `resetConfiguration()`, and
+  a foreign `setOptions()` write is detected and overwritten rather than persisting silently.
+
+- **Match offsets index the password that is echoed back.** Where the repair collapses `i` + U+0307
+  into one character, `sequence[].i`/`.j` addressed the shorter repaired string, so a consumer
+  highlighting matched spans underlined the wrong characters.
 
 - **Stale `userInputs` no longer leak between calls.** zxcvbn leaves the previous call's user inputs
   active when the argument is omitted; `analyzePassword` now always passes an array.
@@ -259,6 +332,7 @@ The public API is **fully backwards-compatible**. Every 0.2.x call signature sti
 
 - Initial public scaffold.
 
+[0.4.0]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.3.0
 [0.2.2]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.2.2
 [0.2.0]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.2.0
