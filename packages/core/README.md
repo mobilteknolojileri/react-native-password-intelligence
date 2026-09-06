@@ -3,7 +3,7 @@
 # Password Intelligence
 
 **Turkish-first, culturally-aware password strength estimation. No framework required.**
-*Wraps the zxcvbn-ts engine with a Turkish-specific threat layer, in ~34 kB gzip.*
+*Wraps the zxcvbn-ts engine with a Turkish-specific threat layer, in ~37 kB gzip.*
 
 [![npm version](https://img.shields.io/npm/v/password-intelligence.svg?style=flat-square)](https://www.npmjs.com/package/password-intelligence)
 [![npm downloads](https://img.shields.io/npm/dm/password-intelligence.svg?style=flat-square)](https://www.npmjs.com/package/password-intelligence)
@@ -81,11 +81,11 @@ lazily on the next call, so there is no initialization ordering to get wrong and
 | Option | Purpose |
 |---|---|
 | `dictionaries` | Extra zxcvbn dictionaries, merged over the bundled ones key by key |
-| `graphs` | Replaces the bundled keyboard adjacency graphs |
+| `graphs` | Extra keyboard adjacency graphs, merged over the bundled ones layout by layout |
 | `translations` | Replaces the bundled Turkish feedback strings; add a `dictionaryWarnings` map to translate the Turkish-category warnings too |
 | `disableTurkishDictionaries` | Ship only the English list |
 | `disableBundledPasswords` | Ship only the Turkish categories |
-| `maxLength` | Characters analysed before truncation (default 1024) |
+| `maxLength` | Characters analysed before truncation (default 256, matching `@zxcvbn-ts/core`) |
 | `useLevenshteinDistance`, `levenshteinThreshold` | Passed through to zxcvbn |
 
 `configure()` validates synchronously and throws a `TypeError` / `RangeError` on an invalid option
@@ -114,8 +114,9 @@ getConfigurationVersion(): number
 React Native hook uses them) whenever `configure`, `resetConfiguration`, `addCustomDictionary` or
 `clearCustomDictionary` changes the engine state.
 
-Non-string passwords are coerced to `''`; input beyond `maxLength` is truncated before zxcvbn
-sees it, capping the O(n²) matcher's worst case.
+Non-string passwords are coerced to `''`, input is normalised to NFC, and anything beyond
+`maxLength` (default 256) is truncated before zxcvbn sees it. The cap bounds the quadratic
+matcher's worst case; it does not make long inputs cheap.
 
 ## Standards
 

@@ -90,7 +90,7 @@ accident. `core/turkishCase.ts` replaces that with two rules:
 - **Password side.** `repairTurkishCase` returns the input unchanged unless default casing would
   miss: a dotted `İ`, or an ASCII `I` next to another Turkish letter. Only then is an ASCII-folded
   copy scored as a second pass. The fold keeps every character's case, the lower score wins and
-  `result.password` always echoes the input.
+  `result.password` echoes the NFC-normalised input.
 
 The bundled dictionary output is byte-identical to the previous hand-written helper; the
 difference is that custom words and `userInputs` now share it instead of using plain
@@ -175,7 +175,7 @@ slice of the password list and the six keyboard graphs (`packages/core/src/data`
 `generate:data` and byte-checked in CI). The measured cost is a false-strong rate under 5% on
 leaked passwords beyond the cutoff (`dictionaryParity.test.ts` enforces the budget), and the fix
 is two lines: `configure({ dictionaries, graphs })` with the full package loaded lazily. CI gates
-the core ESM output at 40 kB gzip (`scripts/check-size.mjs`; ~34 kB today, `@zxcvbn-ts/core` adds
+the core ESM output at 40 kB gzip (`scripts/check-size.mjs`; ~37 kB today, `@zxcvbn-ts/core` adds
 ~20 kB).
 
 Package exports are `import` / `require` only. A `react-native` condition pointing at the ESM
@@ -205,7 +205,7 @@ The library is published as Turkish-first, not "i18n-extensible":
 
 ## Test strategy
 
-210+ tests across the two Jest projects, all starting from a reset engine (`jest.setup.ts` in
+230+ tests across the two Jest projects, all starting from a reset engine (`jest.setup.ts` in
 each package):
 
 - A 30-input score-regression snapshot (`analyzer.test.ts`) so deliberate dictionary or scoring

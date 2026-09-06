@@ -43,6 +43,6 @@ Out of scope:
 ## Hardening Notes for Consumers
 
 - This library performs guess-count estimation and pattern matching only. It does **not** transmit, persist, or hash the analyzed password.
-- Inputs longer than 1,024 characters (configurable via `configure({ maxLength })`, which only accepts a positive integer) are truncated before being passed to the underlying matcher to prevent O(n²) cost on pathological inputs.
+- Inputs longer than 256 characters (configurable via `configure({ maxLength })`, which only accepts a positive integer) are truncated before being passed to the underlying matcher to bound the O(n²) cost of pathological inputs. The cap matches `@zxcvbn-ts/core`'s own default and is a ceiling, not a fast path: a 256-character input still costs on the order of a second.
 - `addCustomDictionary` is bounded at 10,000 entries to prevent unbounded growth in long-running processes.
 - Treat `feedback.warning` / `feedback.suggestions` as advisory; rely on `score` for security-relevant gating logic.

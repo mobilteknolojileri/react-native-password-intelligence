@@ -185,7 +185,7 @@ analyzePassword(
 
 | Field | Type | Notes |
 |---|---|---|
-| `password` | `string` | Non-string values are coerced to `''`. Inputs longer than 1,024 characters are truncated. |
+| `password` | `string` | Non-string values are coerced to `''`. Input is normalised to NFC, and anything past 256 characters is truncated. |
 | `userInputs` | `readonly (string \| number)[]` | Optional. Per-call values penalised alongside the global custom dictionary; strings are matched in Turkish, compact and ASCII-folded forms. |
 
 Returns the full [`ZxcvbnResult`](https://github.com/zxcvbn-ts/zxcvbn) with `score`, `feedback`, `crackTimesDisplay`, `crackTimesSeconds`, `guesses`, `sequence`, etc.
@@ -241,11 +241,11 @@ configure({ dictionaries: dictionary, graphs: adjacencyGraphs });
 | Option | Purpose |
 |---|---|
 | `dictionaries` | Extra zxcvbn dictionaries, merged over the bundled ones key by key |
-| `graphs` | Replaces the bundled keyboard adjacency graphs |
+| `graphs` | Extra keyboard adjacency graphs, merged over the bundled ones layout by layout |
 | `translations` | Replaces the bundled Turkish feedback strings. Any `@zxcvbn-ts/language-*` translations object works; add a `dictionaryWarnings` map (keyed by dictionary name) to translate the Turkish-category warnings too, otherwise those matches return `warning: null` rather than mixing languages |
 | `disableTurkishDictionaries` | Ship only the English list |
 | `disableBundledPasswords` | Ship only the Turkish categories |
-| `maxLength` | Characters analysed before truncation (default 1024) |
+| `maxLength` | Characters analysed before truncation (default 256, matching `@zxcvbn-ts/core`) |
 | `useLevenshteinDistance`, `levenshteinThreshold` | Passed through to zxcvbn |
 
 `configure()` validates synchronously and throws a `TypeError` / `RangeError` on an invalid option (`maxLength` must be a positive integer, `translations` must contain every zxcvbn key, dictionaries must be arrays, …) without touching the current configuration.
@@ -341,12 +341,12 @@ imposed"* — so do not layer character-class rules on top of this score.
 ## Engineering details
 
 - **Deferred initialization** — zxcvbn options (translations, dictionaries) register on the first `analyzePassword` call, not at import time. A screen that never analyzes a password pays no setup cost.
-- **~34 kB gzip, not 236 kB** — the core package vendors a frequency-ordered top-4,000 English password list (measured by `scripts/check-size.mjs` on the ESM output; `@zxcvbn-ts/core` adds ~20 kB either way) instead of pulling in the full 49,233-entry `@zxcvbn-ts/language-common` (229 kB gzip). `configure()` restores full coverage when you want it. Until 0.4.0 that dependency was a static import in the root entry chain, so `sideEffects: false` could not remove it — deferring the *call* does not defer the *import*, and Metro does not tree-shake at all.
+- **~37 kB gzip, not 236 kB** — the core package vendors a frequency-ordered top-4,000 English password list (measured by `scripts/check-size.mjs` on the ESM output; `@zxcvbn-ts/core` adds ~20 kB either way) instead of pulling in the full 49,233-entry `@zxcvbn-ts/language-common` (229 kB gzip). `configure()` restores full coverage when you want it. Until 0.4.0 that dependency was a static import in the root entry chain, so `sideEffects: false` could not remove it — deferring the *call* does not defer the *import*, and Metro does not tree-shake at all.
 - **Tree-shakeable** — `sideEffects: false`, so bundlers that support it can drop the UI component and hook for consumers who only import `analyzePassword`. On React Native, install `password-intelligence` instead to skip them entirely.
-- **Long-input safety** — passwords longer than 1,024 characters are truncated before zxcvbn sees them, capping the O(n²) matcher's worst-case cost.
-- **Targeted Turkish case repair** — the password is scored *as typed*, so uppercase entropy and zxcvbn's capitalization feedback survive. Unicode default casing breaks matching in two places — the dotted capital `İ` (mapped to `i` + U+0307) and an ASCII `I` next to other Turkish letters (`ŞANLIURFA` lowercases to `şanliurfa`, which is neither `şanlıurfa` nor `sanliurfa`) — so only such inputs get an ASCII-folded second pass. The lower score wins and `result.password` always echoes the input.
+- **Long-input safety** — passwords longer than 256 characters are truncated before zxcvbn sees them, matching `@zxcvbn-ts/core`'s own default. This is load-bearing rather than redundant: v3 applies its `maxLength` only inside `zxcvbnAsync`, so the synchronous `zxcvbn()` this library calls receives the raw string. The cap bounds the worst case; it does not make long inputs cheap.
+- **Targeted Turkish case repair** — the password is scored *as typed*, so uppercase entropy and zxcvbn's capitalization feedback survive. Unicode default casing breaks matching in two places — the dotted capital `İ` (mapped to `i` + U+0307) and an ASCII `I` next to other Turkish letters (`ŞANLIURFA` lowercases to `şanliurfa`, which is neither `şanlıurfa` nor `sanliurfa`) — so only such inputs get an ASCII-folded second pass. The lower score wins, and `result.password` echoes the NFC-normalised input.
 - **Turkish feedback by default** — warning and suggestion strings are returned in Turkish, matching the dictionary intelligence, and Turkish dictionary matches explain themselves (team, city, brand, …) under the same rule zxcvbn applies to its own warnings: never for a password that already scores 3 or 4. To use English, install `@zxcvbn-ts/language-en` and pass its `translations` to `configure()`.
-- **Industry-grade tests** — 210+ tests gated at 85% lines / 80% functions / 75% branches, plus a CI gzip budget and a tarball-contents check. A 30-input score-regression snapshot guards against accidental drift in dictionary or scoring updates.
+- **Industry-grade tests** — 230+ tests gated at 85% lines / 80% functions / 75% branches, plus a CI gzip budget and a tarball-contents check. A 30-input score-regression snapshot guards against accidental drift in dictionary or scoring updates.
 - **Strict TypeScript** — `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, `isolatedModules`, `useDefineForClassFields`.
 - **Zero native code** — pure JavaScript, works on Expo, iOS, Android, and Web.
 - **Single-locale today** — the architecture is one Turkish dictionary deeply, not a plugin system. `configure({ dictionaries })` already lets you add any locale's corpus at runtime; a first-class locale-plugin abstraction is on the 1.0.0 roadmap.
