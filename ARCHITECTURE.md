@@ -195,11 +195,14 @@ The library is published as Turkish-first, not "i18n-extensible":
 
 ## Performance budget
 
-- **First analysis (cold)**: ~30–80 ms on a mid-range Android device — `zxcvbnOptions.setOptions`
-  building the rank tables. Re-applying options after `configure()` is ~1 ms for the bundled
-  dictionaries, ~8 ms with the full `language-common` set.
-- **Subsequent analysis (warm)**: ~1–10 ms typical, ~50 ms worst case for inputs that trigger the
-  case-repair second pass.
+- **First analysis (cold)**: ~38 ms in a fresh Node process, more on a mid-range Android device —
+  `zxcvbnOptions.setOptions` building the rank tables. Re-applying options after `configure()` is
+  ~1 ms for the bundled dictionaries, ~15 ms with the full `language-common` set.
+- **Subsequent analysis (warm)**: dominated by input length, not by the case repair. Median of ten
+  distinct random inputs per length on a desktop: 0.4 ms at 8 characters, 2.7 ms at 16, 82 ms at
+  32, 190 ms at 64, 409 ms at 128, and ~890 ms from 256 upwards — flat past that because
+  `maxLength` truncates. The case-repair second pass roughly doubles the cost of the rare inputs
+  that trigger it.
 - **Hook re-render (same input)**: a single `JSON.parse` of the cached key. Effectively free.
 - **`<PasswordMeter score={s} />`**: no analyzer cost. Animation only.
 

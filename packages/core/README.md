@@ -120,23 +120,41 @@ matcher's worst case; it does not make long inputs cheap.
 
 ## Standards
 
-NIST SP 800-63B [§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html) requires verifiers to
-compare passwords against *"a blocklist that contains known commonly used, expected, or
-compromised passwords"* — including **dictionary words** and **context-specific words, such as
-the name of the service, the username, and derivatives thereof** — and to *"offer guidance to the
-subscriber."* This library helps you implement that: the Turkish corpus is the regional
-blocklist, `userInputs` covers context-specific words, and the Turkish feedback is the guidance.
+NIST SP 800-63B-4 §3.1.1.2 *Password Verifiers*
+([HTML](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver) ·
+[DOI](https://doi.org/10.6028/NIST.SP.800-63b-4)) requires that *"verifiers SHALL compare the
+prospective secret against a blocklist that contains known commonly used, expected, or compromised
+passwords."* **Dictionary words** and **context-specific words, such as the name of the service,
+the username, and derivatives thereof** appear there as example entries — the wording is *"For
+example, the list may include…"*, not a mandated set. Verifiers must also *"offer guidance to the
+subscriber to help the subscriber choose a strong password."*
+
+One sentence in that section matters more than the rest for a library like this one:
+
+> *"The entire password SHALL be subject to comparison, not substrings or words that might be
+> contained therein."*
+
+zxcvbn is a substring and pattern matcher by construction, which is the opposite of the
+whole-password membership test §3.1.1.2 prescribes. So this library does **not** implement that
+blocklist check, and no client-side scorer can. What it does give you is the guidance requirement
+— Turkish `feedback.warning` and `feedback.suggestions` — plus corpora you can feed to a real
+verifier-side blocklist, and `userInputs` / `addCustomDictionary` for context-specific words as
+scoring signals.
 
 **It does not make you compliant.** Enforcement belongs to the verifier and must happen
-server-side. The same section also states that *"other composition requirements for passwords
-SHALL NOT be imposed"* — do not layer character-class rules on top of this score.
+server-side. Note also that §3.1.1.2 item 5 states *"Verifiers and CSPs SHALL NOT impose other
+composition rules (e.g., requiring mixtures of different character types) for passwords"*
+(§3.1.1.1 puts it as *"Other composition requirements for passwords SHALL NOT be imposed."*) — do
+not layer character-class rules on top of this score.
 
 ## What this is not
 
 - **Not a password manager** — does not store, transmit, or sync passwords.
-- **Not a hash function** — pair with **Argon2id** ([RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html)),
-  scrypt, or PBKDF2 per the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html);
-  bcrypt only for legacy systems.
+- **Not a hash function** — pair with **Argon2id** (described in
+  [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html), an Informational IRTF/CFRG document
+  rather than a standards-track spec) or scrypt, per the
+  [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html);
+  PBKDF2 when FIPS-140 validation is required, and bcrypt only for legacy systems.
 - **Not a generator** — use a CSPRNG-backed generator.
 - **Not a server-side validator** — the score is a UX hint, not an authorization gate.
 
