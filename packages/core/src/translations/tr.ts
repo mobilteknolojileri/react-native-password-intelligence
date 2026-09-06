@@ -3,8 +3,10 @@
  *
  * Mirrors the shape of `@zxcvbn-ts/language-en` (TranslationKeys) plus
  * `dictionaryWarnings` for the dictionaries zxcvbn does not explain itself, so
- * the library remains self-contained without depending on `language-en` or
- * the (still upstream-pending) `@zxcvbn-ts/language-tr` package.
+ * the library stays self-contained: no runtime dependency on `language-en`,
+ * and none on `@zxcvbn-ts/language-tr` (which this author also maintains)
+ * either - that pack does ship Turkish translations, but pulling it in would
+ * drag its 30,000-word corpus along for strings this file provides inline.
  */
 import type { PasswordIntelligenceTranslations } from '../types';
 
