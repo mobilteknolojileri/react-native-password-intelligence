@@ -40,18 +40,54 @@ This project uses [Yarn workspaces](https://yarnpkg.com/features/workspaces).
 
 Both packages ship in lockstep on one version.
 
-1. `yarn release` (release-it) bumps the root `package.json`, runs `scripts/sync-versions.mjs` to
-   propagate the version to `packages/*` and to the wrapper's `password-intelligence` range,
-   refreshes `yarn.lock`, commits, tags `vX.Y.Z` and pushes.
-2. The tag triggers `.github/workflows/release.yml`, which re-verifies everything, refuses a tag
+`yarn release` (release-it) is deliberately **not** used: its conventional-changelog plugin
+prepends a generated section over the hand-written one, and a breaking commit anywhere in the range
+makes it propose a major bump. Release by hand instead.
+
+1. Bump and propagate:
+
+   ```sh
+   npm pkg set version=X.Y.Z
+   node scripts/sync-versions.mjs        # packages/* and the wrapper's dependency range
+   yarn install --mode=update-lockfile   # do not skip this
+   ```
+
+   Skipping the lockfile refresh leaves `yarn.lock` on the previous version and every CI job fails
+   at install with `YN0028: The lockfile would have been modified by this install`.
+
+2. Write the `CHANGELOG.md` section, including its `[X.Y.Z]:` link definition at the bottom of the
+   file.
+
+3. Commit, then tag — **annotated**, never lightweight:
+
+   ```sh
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin main
+   # wait for CI to go green on main, then:
+   git push origin vX.Y.Z
+   ```
+
+   `git push --follow-tags` silently skips lightweight tags, so the release never fires and the only
+   symptom is a version that never reaches the registry. Push the tag explicitly.
+
+4. The tag triggers `.github/workflows/release.yml`, which refuses a non-tag ref, refuses a tag
    whose package versions disagree (`node scripts/sync-versions.mjs --check --tag vX.Y.Z`), then
    publishes `password-intelligence` first (the wrapper depends on it) and the wrapper second, both
-   with npm provenance via OIDC trusted publishing.
-3. **First publish of a new package name**: npm trusted publishers can only be configured on a
-   package that already exists on the registry. Publish the very first version of a new package
-   manually with a granular access token (`npm publish --access public` from the built package
-   directory), then add the GitHub Actions trusted publisher in the package settings before the
-   next tag.
+   with npm provenance via OIDC trusted publishing. Each publish step skips a version already on the
+   registry, so re-running the workflow from the same tag finishes a partial release.
+
+**Readmes only reach the registry on publish**, and the file that gets rendered is
+`packages/core/README.md` or `packages/react-native/README.md` — never the repository root readme.
+A documentation fix therefore needs a patch release, and any section rewritten at the root has to be
+carried across to both package readmes in the same change.
+
+**First publish of a new package name**: a trusted publisher can only be configured on a package
+that already exists, so the name has to be claimed first. Publish a placeholder version manually —
+both manifests set `publishConfig.provenance`, which cannot be produced outside CI, so override it
+with `npm publish --access public --ignore-scripts --provenance=false`. Deprecate the placeholder,
+then add the trusted publisher from the package settings on the registry website rather than the
+CLI: the web form has an allowed-actions field the CLI cannot express, and direct publishing must be
+permitted, not only staged publishing.
 
 ## Commit Conventions
 
