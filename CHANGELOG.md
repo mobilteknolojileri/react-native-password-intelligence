@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-06
+
+Documentation only. No runtime change; upgrading from 0.4.0 is optional.
+
+### Fixed
+
+- **The published readmes carried a half-updated copy of three sections.** The comparison table,
+  the standards section and the performance notes were rewritten for 0.4.0 in the repository
+  readme but never carried across to `packages/core/README.md` and
+  `packages/react-native/README.md`, which are the files npm renders. Consumers of 0.4.0 saw a
+  comparison table crediting the upstream engine with a provenance attestation it does not
+  publish, a standards section that attributed a quoted requirement to the wrong subsection and
+  omitted the sentence limiting the blocklist comparison to whole passwords, and timing figures
+  measured before the truncation default changed.
+- Architecture notes now quote measured timings per input length rather than a single warm figure.
+
+
 ## [0.4.0] - 2026-09-06
 
 ### Changed
@@ -332,6 +349,7 @@ The public API is **fully backwards-compatible**. Every 0.2.x call signature sti
 
 - Initial public scaffold.
 
+[0.4.1]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.4.1
 [0.4.0]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.3.0
 [0.2.2]: https://github.com/mobilteknolojileri/react-native-password-intelligence/releases/tag/v0.2.2
