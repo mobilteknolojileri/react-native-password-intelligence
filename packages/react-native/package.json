@@ -36,7 +36,7 @@
   },
   "scripts": {
     "clean": "del-cli lib",
-    "build": "bob build",
+    "build": "yarn run -T turbo run build --filter=password-intelligence && bob build",
     "prepack": "yarn run -T turbo run build --filter=react-native-password-intelligence"
   },
   "keywords": [
