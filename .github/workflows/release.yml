@@ -43,8 +43,8 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org
 
-      - name: Use latest npm (required for trusted publisher oidc)
-        run: npm install -g npm@latest
+      - name: Use npm with trusted publisher support
+        run: npm install -g npm@11.19.1
 
       # release-it bumps only the root package.json; packages/* are synced by
       # scripts/sync-versions.mjs in its after:bump hook. Publishing a tag
