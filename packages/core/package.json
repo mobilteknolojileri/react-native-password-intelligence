@@ -95,7 +95,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@zxcvbn-ts/core": "^3.0.4"
+    "@zxcvbn-ts/core": "^4.2.0"
   },
   "devDependencies": {
     "@zxcvbn-ts/language-common": "^3.0.4",
