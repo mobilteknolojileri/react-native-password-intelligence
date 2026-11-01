@@ -9,15 +9,15 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~55.0.6",
-    "expo": "~55.0.7",
-    "expo-status-bar": "~55.0.4",
+    "@expo/metro-runtime": "~58.0.15",
+    "expo": "~58.0.21",
+    "expo-status-bar": "~58.0.4",
     "password-intelligence": "workspace:*",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-native": "0.83.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-native": "0.88.1",
     "react-native-password-intelligence": "workspace:*",
-    "react-native-web": "~0.21.0"
+    "react-native-web": "~0.21.4"
   },
   "private": true,
   "devDependencies": {
